@@ -30,6 +30,8 @@ A fonte está em `functions/summarize-appointment/`. O arquivo `config.toml` man
 
 A função usa o JWT para validar o usuário e consultar o atendimento com RLS. Na fase inicial, envia apenas o relato à OpenRouter. Se já houver respostas, utiliza a consolidação do banco e não gera uma nova rodada.
 
+A geração inicial faz até duas tentativas de 18 segundos para falhas temporárias ou saída inválida. Não repete erros de conta/créditos ou limite de uso. Valida o JSON e compara a versão do atendimento antes de salvar; os logs operacionais não contêm relatos nem credenciais. Mantenha publicados `index.ts` e `handler.mjs` juntos.
+
 ## Formato das fichas
 
 - Versão 2: organização inicial gerada por IA, com fatos relatados, lacunas e perguntas.

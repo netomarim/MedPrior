@@ -33,6 +33,11 @@ function fixture(options = {}) {
     env: { get: name => ({ SUPABASE_URL: 'https://example.supabase.co', SUPABASE_ANON_KEY: 'public-key', OPENROUTER_API_KEY: options.noKey ? undefined : 'test-secret' })[name] },
     fetchImpl: async (url, init) => {
       state.requests.push({ url, ...init });
+      if (options.firstFailure && state.requests.length === 1) {
+        if (options.firstFailure === 'timeout') throw new DOMException('timeout', 'TimeoutError');
+        if (options.firstFailure === 'invalid') return new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content:'not JSON'}}]}));
+        return new Response('{}', {status:503});
+      }
       if (options.timeout) throw new DOMException('timeout', 'TimeoutError');
       return new Response(JSON.stringify(options.providerBody || { choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(analysis) } }] }), { status: options.providerStatus || 200 });
     },
@@ -139,4 +144,27 @@ test('saved answers consolidate without another provider request',async()=>{
 test('completed appointment rejects regeneration',async()=>{
  const {handler,state,request}=fixture({item:{status:'Finalizado'}});
  assert.equal((await handler(request())).status,409);assert.equal(state.requests.length,0);
+});
+
+for (const firstFailure of ['timeout','invalid','unavailable']) {
+ test(`recovers from ${firstFailure} with one automatic retry and saves once`,async()=>{
+  const {handler,state,request}=fixture({firstFailure});
+  assert.equal((await handler(request())).status,200);
+  assert.equal(state.requests.length,2);assert.equal(state.writes.length,1);
+ });
+}
+test('rate limits and credentials are not retried',async()=>{
+ for(const providerStatus of [429,401,402,403]){
+  const {handler,state,request}=fixture({providerStatus});
+  await handler(request());assert.equal(state.requests.length,1);
+ }
+});
+test('persistent provider errors stop after two attempts without saving',async()=>{
+ const {handler,state,request}=fixture({providerStatus:503});
+ assert.equal((await handler(request())).status,502);
+ assert.equal(state.requests.length,2);assert.equal(state.writes.length,0);
+});
+test('accepts fenced JSON but never partial or arbitrary prose',()=>{
+ assert.deepEqual(parseAnalysis('```json\n'+JSON.stringify(analysis)+'\n```'),analysis);
+ assert.equal(parseAnalysis('Here is the result: '+JSON.stringify(analysis)),null);
 });

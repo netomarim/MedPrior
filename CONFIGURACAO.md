@@ -33,7 +33,9 @@ O projeto Supabase usado pela demonstração já está configurado. Consulte [su
 
 A função `summarize-appointment` exige JWT de usuário. No painel do projeto, em **Edge Functions > Secrets**, configure `OPENROUTER_API_KEY`. A chave permanece no servidor do Supabase e não precisa ser copiada para o `.env` local.
 
-`OPENROUTER_MODEL` é opcional e substitui o modelo padrão `openrouter/free`; confira o preço antes de selecionar um modelo pago. A geração inicial tem timeout de 45 segundos na função; o Flask aguarda até 55 segundos pela resposta, além do limite de conexão.
+`OPENROUTER_MODEL` é opcional e substitui o modelo padrão `openrouter/free`; confira o preço antes de selecionar um modelo pago. A geração inicial faz até duas tentativas de 18 segundos cada para falhas temporárias, timeout ou saída inválida. Erros de chave, créditos e limite de uso não são repetidos. O Flask aguarda até 55 segundos pela resposta, além do limite de conexão. O roteador gratuito continua sujeito à disponibilidade dos provedores; o aplicativo não muda automaticamente para modelos pagos.
+
+O pedido desativa raciocínio adicional quando o provedor permite, para reduzir latência e respostas truncadas. O JSON continua sendo validado antes de salvar; uma falha preserva os dados anteriores. Os logs `analysis_provider` contêm apenas número da tentativa, código e categoria do erro, sem relatos ou credenciais.
 
 A função inicial organiza o relato e sugere perguntas. Depois de registrar a única rodada de respostas, o banco gera a ficha final sem chamar a OpenRouter novamente. A exportação em PDF também funciona sem conexão com a OpenRouter.
 
@@ -50,6 +52,19 @@ Use o e-mail e a senha da conta cadastrada no Supabase Auth. A senha não fica n
 Se um vínculo for alterado com a pessoa já conectada, ela deve clicar em **Atualizar acesso**. Se a sessão expirar, entre novamente.
 
 A confirmação de e-mail depende da configuração de envio do Supabase. Para um novo projeto, confira esse envio e os endereços de redirecionamento do Auth; o aplicativo não configura esses serviços automaticamente.
+
+## Recuperar senha
+
+Na tela de entrada, use **Esqueci minha senha**, informe o e-mail e abra o link recebido com o servidor Python em execução. O aplicativo apresenta os campos de nova senha e confirmação (mínimo de 12 caracteres) e volta ao login após salvar. Links inválidos ou expirados orientam a solicitar outro. O ícone de olho no login alterna a visibilidade da senha.
+
+No painel do Supabase, em **Authentication > URL Configuration > Redirect URLs**, autorize os endereços usados pelos colegas:
+
+```text
+http://127.0.0.1:3000/?recovery=1
+http://localhost:3000/?recovery=1
+```
+
+Se usar outra porta, cadastre também o endereço correspondente. O link usa o endereço em que a pessoa pediu a recuperação e deve ser aberto no computador com o servidor em execução. Confira o envio de e-mail/SMTP e seus limites no Supabase; o aplicativo não altera essas configurações. A mensagem de solicitação não informa se o e-mail possui conta.
 
 ## Atualizar o projeto
 

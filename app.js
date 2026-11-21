@@ -11,6 +11,7 @@ let detailEpoch = 0;
 let busy = false;
 let toastTimer;
 let stats = null;
+let passwordRecovery = /(?:[?&]recovery=1|(?:^|[#&])type=recovery)/.test((window.location?.search || '') + (window.location?.hash || ''));
 function initials(value) { return value.trim().split(/\s+/).slice(0, 2).map(part => part[0]?.toUpperCase() || '').join(''); }
 function escapeHtml(value) { return String(value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char])); }
 function formatTime(iso) { return new Intl.DateTimeFormat('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(iso)); }
@@ -56,6 +57,8 @@ function friendlyError(error, fallback = 'Não foi possível concluir. Confira s
   if (/Invalid login credentials/i.test(message)) return 'E-mail ou senha incorretos.';
   if (/already registered/i.test(message)) return 'Este e-mail já possui uma conta. Use a tela de entrada.';
   if (/password.*at least|weak password/i.test(message)) return 'Escolha uma senha mais forte, com pelo menos 12 caracteres.';
+  if (/same_password|different from the old|different password/i.test(error?.code || message)) return 'Escolha uma senha diferente da anterior.';
+  if (/otp_expired|expired.*link|invalid.*token/i.test(error?.code || message)) return 'O link de recuperação expirou ou já foi usado. Solicite outro em “Esqueci minha senha”.';
   if (/^(23|42)/.test(error?.code || '')) return fallback;
   if (/Email not confirmed/i.test(message)) return 'Confirme seu e-mail antes de entrar.';
   if (/rate limit|too many requests/i.test(message)) return 'Muitas tentativas. Aguarde alguns minutos e tente novamente.';
@@ -168,7 +171,7 @@ async function openDetail(id) {
   }));
   $('#generate-summary')?.addEventListener('click', () => run(async () => {
     if (hasAnswerDraft() || hasPriorityDraft()) throw new Error('Salve as alterações digitadas antes de atualizar a ficha.');
-    $('#ai-message').textContent = interviewComplete ? 'Consolidando as respostas salvas...' : 'Gerando as perguntas da entrevista...';
+    $('#ai-message').textContent = interviewComplete ? 'Consolidando as respostas salvas...' : 'Gerando perguntas. Se houver falha temporária, uma segunda tentativa será feita automaticamente. Isso pode levar cerca de 40 segundos.';
     await cloud.summarize(id, Boolean(item.aiSummary));
     const updated = await cloud.get(id); if (version !== sessionVersion) return;
     updateItem(updated); await openDetail(id);
@@ -251,8 +254,26 @@ function showLogin(message='') {
   sessionVersion++; detailEpoch++; busy=false; cloud.clear(); appointments=[]; queue=[]; detailItem=null; stats=null; resetListState(); render();
   $$('dialog[open]').forEach(dialog=>dialog.close());
   $('#authenticated-app').classList.add('hidden'); $('#login-screen').classList.remove('hidden'); $('#login-message').textContent=message;
+  $('#password-reset-screen').classList.add('hidden');
+  $('#login-password').type='password';
+  $('#toggle-login-password').setAttribute('aria-label','Mostrar senha');
+  $('#toggle-login-password').setAttribute('aria-pressed','false');
+  $('.eye-slash',$('#toggle-login-password')).classList.toggle('hidden',true);
+}
+function showPasswordRecovery(message='') {
+  showLogin();
+  $('#login-screen').classList.add('hidden'); $('#password-reset-screen').classList.remove('hidden');
+  $('#reset-password-message').textContent=message;
+}
+function clearRecoveryAddress() {
+  window.history?.replaceState(null, '', window.location.pathname);
 }
 async function enterSession(session,view) {
+  if(passwordRecovery) {
+    if(session) showPasswordRecovery();
+    else { passwordRecovery=false; clearRecoveryAddress(); showLogin('O link de recuperação é inválido ou expirou. Solicite outro em “Esqueci minha senha”.'); }
+    return;
+  }
   if(!session) {showLogin(); return;}
   const previous=cloud.clinicId;
   sessionVersion++; const version=sessionVersion; detailEpoch++;
@@ -293,6 +314,38 @@ $('#login-form').addEventListener('submit',async event=>{
   event.preventDefault(); $('#login-submit').disabled=true;
   try {const session=await cloud.login($('#login-email').value.trim(),$('#login-password').value);$('#login-password').value='';await enterSession(session);}
   catch(error){showLogin(friendlyError(error,'Não foi possível entrar.'));}finally{$('#login-submit').disabled=false;}
+});
+$('#toggle-login-password').addEventListener('click',()=>{
+  const input=$('#login-password'), button=$('#toggle-login-password');
+  const visible=input.type==='password'; input.type=visible?'text':'password';
+  button.setAttribute('aria-label',visible?'Ocultar senha':'Mostrar senha');
+  button.setAttribute('aria-pressed',String(visible));
+  $('.eye-slash',button).classList.toggle('hidden',!visible);
+});
+$('#forgot-password').addEventListener('click',()=>{
+  $('#forgot-password-form').reset();$('#recovery-email').value=$('#login-email').value.trim();
+  $('#recovery-message').textContent='';$('#forgot-password-dialog').showModal();
+});
+$('#close-forgot-password').addEventListener('click',()=>$('#forgot-password-dialog').close());
+$('#forgot-password-form').addEventListener('submit',async event=>{
+  event.preventDefault();const button=event.currentTarget.querySelector('[type="submit"]');button.disabled=true;
+  $('#recovery-message').textContent='Enviando solicitação...';
+  try {await cloud.requestPasswordReset($('#recovery-email').value.trim());$('#recovery-message').textContent='Se houver uma conta com esse e-mail, você receberá um link para definir a nova senha. Confira também o spam. Abra o link com este servidor Python em execução.';}
+  catch(error){$('#recovery-message').textContent=friendlyError(error);}finally{button.disabled=false;}
+});
+$('#reset-password-form').addEventListener('submit',async event=>{
+  event.preventDefault();const password=$('#reset-password').value;
+  if(password.length<12 || password!==$('#reset-password-confirm').value){$('#reset-password-message').textContent='Use pelo menos 12 caracteres e confirme a mesma senha nos dois campos.';return;}
+  const button=$('#reset-password-submit');button.disabled=true;$('#cancel-password-reset').disabled=true;
+  try {
+    await cloud.updatePassword(password);$('#reset-password-form').reset();passwordRecovery=false;clearRecoveryAddress();
+    try {await cloud.logout();showLogin('Senha atualizada. Entre com a nova senha.');}
+    catch {showLogin('Senha atualizada. Entre com a nova senha.');}
+  }catch(error){$('#reset-password-message').textContent=friendlyError(error);}finally{button.disabled=false;$('#cancel-password-reset').disabled=false;}
+});
+$('#cancel-password-reset').addEventListener('click',async()=>{
+  try {await cloud.logout();passwordRecovery=false;clearRecoveryAddress();$('#reset-password-form').reset();showLogin();}
+  catch(error){$('#reset-password-message').textContent=friendlyError(error);}
 });
 $('#logout-button').addEventListener('click',async()=>{if(busy||appointmentSaving){showToast('Aguarde a operação terminar.');return;}if($('#detail-dialog').open&&!closeDetail())return;try{await cloud.logout();showLogin();}catch{showToast('Não foi possível sair.');}});
 $('#refresh-appointments').addEventListener('click',async event=>{event.target.disabled=true;try{await reloadAppointments();}catch(error){showToast(friendlyError(error));}finally{event.target.disabled=false;}});
@@ -340,6 +393,18 @@ window.addEventListener?.('beforeunload',event=>{
   if (busy || appointmentSaving || dirtyDetail || dirtyNew) {event.preventDefault();event.returnValue='';}
 });
 $('#today-label').textContent=new Intl.DateTimeFormat('pt-BR',{weekday:'long',day:'numeric',month:'long'}).format(new Date()).toLocaleUpperCase('pt-BR');
-cloud.client?.auth.onAuthStateChange(event=>{if(event==='SIGNED_OUT')showLogin('Sua sessão foi encerrada.');});
+cloud.client?.auth.onAuthStateChange(event=>{
+  // Não chamar métodos Auth assíncronos dentro do callback (lock da sessão).
+  if(event==='PASSWORD_RECOVERY'){passwordRecovery=true;showPasswordRecovery();}
+  if(event==='SIGNED_OUT' && !passwordRecovery)showLogin('Sua sessão foi encerrada.');
+});
 render();
-(async()=>{try{await enterSession(await cloud.session());}catch(error){showLogin(friendlyError(error,'Não foi possível carregar sua conta.'));}finally{$('#login-submit').disabled=!cloud.client;}})();
+(async()=>{
+  try {
+    if(cloud.recoveryLinkError){
+      passwordRecovery=false;clearRecoveryAddress();
+      showLogin('O link de recuperação expirou ou é inválido. Solicite outro em “Esqueci minha senha”.');
+    } else await enterSession(await cloud.session());
+  }catch(error){passwordRecovery=false;showLogin(friendlyError(error,'Não foi possível carregar sua conta.'));}
+  finally{$('#login-submit').disabled=!cloud.client;}
+})();

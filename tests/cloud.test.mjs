@@ -3,13 +3,16 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-function fixture({deferAdmin=false, conflict=false, invalidConfig=false}={}) {
+function fixture({deferAdmin=false, conflict=false, invalidConfig=false, authError=null}={}) {
   const queries=[];
+  const authCalls=[];
   let resolveAdmin;
   const pending=new Promise(resolve=>{resolveAdmin=resolve;});
   const row={id:'appointment-one',clinic_id:'clinic-one',patient_label:'Paciente',report:'Relato fictício',status:'Em atendimento',updated_at:'current-version',created_at:'2026-11-21T12:00:00Z'};
   const client={
-    auth:{getSession:async()=>({data:{session:null},error:null})},
+    auth:{getSession:async()=>({data:{session:null},error:null}),
+      async resetPasswordForEmail(...args){authCalls.push(['reset',...args]);return {error:authError};},
+      async updateUser(...args){authCalls.push(['update',...args]);return {error:authError};}},
     rpc:async()=>deferAdmin ? pending : {data:true,error:null},
     from(table){
       const query={table,operations:[]};queries.push(query);
@@ -21,9 +24,9 @@ function fixture({deferAdmin=false, conflict=false, invalidConfig=false}={}) {
       return chain;
     },
   };
-  const context={window:{MEDPRIOR_CONFIG:invalidConfig?{}:{supabaseUrl:'https://example.supabase.co',supabasePublishableKey:'public-test-key'},supabase:{createClient:()=>client}}};
+  const context={window:{location:{origin:'http://127.0.0.1:3000',hash:''},MEDPRIOR_CONFIG:invalidConfig?{}:{supabaseUrl:'https://example.supabase.co',supabasePublishableKey:'public-test-key'},supabase:{createClient:()=>client}}};
   vm.runInNewContext(fs.readFileSync(new URL('../cloud.js',import.meta.url),'utf8'),context);
-  return {cloud:context.window.MedPriorCloud,queries,resolveAdmin};
+  return {cloud:context.window.MedPriorCloud,queries,resolveAdmin,authCalls};
 }
 
 test('a bind finishing after logout cannot restore the old account access',async()=>{
@@ -70,4 +73,17 @@ test('detail reads the appointment and its answers in the same query',async()=>{
  assert.equal(detail.item.id,'appointment-one');
  assert.equal(detail.answers.length,0);
  assert.ok(queries.at(-1).operations.some(op=>op[0]==='select'&&op[1].includes('appointment_answers(')));
+});
+
+test('password recovery uses current origin and only sends the email to Auth',async()=>{
+ const {cloud,authCalls}=fixture();await cloud.requestPasswordReset('member@example.test');
+ assert.equal(authCalls[0][1],'member@example.test');
+ assert.equal(authCalls[0][2].redirectTo,'http://127.0.0.1:3000/?recovery=1');
+});
+test('password change uses the authenticated updateUser API and propagates errors',async()=>{
+ const {cloud,authCalls}=fixture();await cloud.updatePassword('test-password-123');
+ assert.equal(authCalls[0][0],'update');assert.equal(authCalls[0][1].password,'test-password-123');
+ const failure=fixture({authError:new Error('expired session')});
+ await assert.rejects(failure.cloud.updatePassword('test-password-123'),/expired session/);
+ await assert.rejects(failure.cloud.requestPasswordReset('member@example.test'),/expired session/);
 });

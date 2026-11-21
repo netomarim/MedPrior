@@ -10,10 +10,13 @@ function page() {
   const elements = new Map();
   for (const match of html.matchAll(/<[^>]+\bid="([^"]+)"[^>]*>/g)) {
     const classes = new Set((match[0].match(/\bclass="([^"]*)"/)?.[1] || '').split(/\s+/));
-    const element = { id: match[1], value: '', textContent: '', innerHTML: '', dataset: {}, disabled: /\sdisabled(?:\s|>)/.test(match[0]),
+    const handlers = {};
+    const element = { id: match[1], value: '', type:match[0].match(/\btype="([^"]*)"/)?.[1], textContent: '', innerHTML: '', dataset: {}, disabled: /\sdisabled(?:\s|>)/.test(match[0]),
       classList: { add: value => classes.add(value), remove: value => classes.delete(value),
         contains: value => classes.has(value), toggle(value, enabled) { if (enabled) classes.add(value); else classes.delete(value); } },
-      addEventListener() {}, close() {}, closest() { return {classList:this.classList}; } };
+      addEventListener(name, fn) {handlers[name]=fn;}, dispatch(name){return handlers[name]?.({preventDefault(){},currentTarget:this});},
+      setAttribute(name,value){this[name]=value;},querySelector(){return {classList:{toggle(){}},disabled:false};},
+      reset(){}, showModal(){this.open=true;}, close(){this.open=false;}, closest() { return {classList:this.classList}; } };
     elements.set(element.id, element);
   }
   return { elements, querySelector: selector => selector.startsWith('#') ? elements.get(selector.slice(1)) || null : null,
@@ -25,8 +28,11 @@ async function start(session = null, options = {}) {
   const access = {isAdmin:true, clinics:[{id:'clinic-one',name:'Clínica de teste',active:true}], memberships:[{clinic_id:'clinic-one',role:'owner'}]};
   const calls = [];
   const cloud = {
-    client:{auth:{onAuthStateChange(){}}}, access, clinicId:null,
-    session:async()=>session,
+    client:{auth:{onAuthStateChange(fn){this.listener=fn;}}}, access, clinicId:null,recoveryLinkError:options.linkError,
+    async requestPasswordReset(email){calls.push(['reset-email',email]);},
+    async updatePassword(password){calls.push(['password',password]);if(options.updateError)throw new Error('Falha ao salvar senha.');},
+    async logout(){calls.push('logout');},
+    session:async()=>{if(options.recoveryEvent)cloud.client.auth.listener('PASSWORD_RECOVERY');return session;},
     clear(){this.clinicId=null;},
     async bind(){return access;},
     selectClinic(id){this.clinicId=id;calls.push('select');},
@@ -35,7 +41,7 @@ async function start(session = null, options = {}) {
     async stats(){assert.equal(this.clinicId,'clinic-one');return {total:options.items?.length || 0,waiting:0,progress:0,done_today:0};},
     get canManage(){return true;},
   };
-  const context = {document,window:{MedPriorCloud:cloud,scrollTo(){}},Intl,Date,Set,
+  const context = {document,window:{MedPriorCloud:cloud,scrollTo(){},location:{search:options.recovery?'?recovery=1':'',hash:'',pathname:'/'},history:{replaceState(){}}},Intl,Date,Set,
     setTimeout:()=>0,clearTimeout(){}};
   vm.runInNewContext(fs.readFileSync(new URL('../analysis.js',import.meta.url),'utf8'),context);
   await vm.runInNewContext(fs.readFileSync(new URL('../app.js',import.meta.url),'utf8'),context);
@@ -76,4 +82,42 @@ test('common login errors are translated without leaking database errors',async(
  const {context}=await start();
  assert.equal(vm.runInNewContext("friendlyError({message:'Invalid login credentials'})",context),'E-mail ou senha incorretos.');
  assert.ok(!vm.runInNewContext("friendlyError({code:'23514',message:'check constraint internal_table'})",context).includes('internal_table'));
+});
+
+test('eye toggles password visibility and accessible label without submitting login',async()=>{
+ const {document}=await start();const eye=document.elements.get('toggle-login-password'),input=document.elements.get('login-password');
+ await eye.dispatch('click');assert.equal(input.type,'text');assert.equal(eye['aria-label'],'Ocultar senha');
+ await eye.dispatch('click');assert.equal(input.type,'password');assert.equal(eye['aria-pressed'],'false');
+});
+test('a recovery session opens password form instead of loading clinic records',async()=>{
+ const {document,calls}=await start({user:{id:'one',email:'test@example.test'}},{recovery:true});
+ assert.deepEqual(calls,[]);assert.equal(document.elements.get('password-reset-screen').classList.contains('hidden'),false);
+ assert.equal(document.elements.get('authenticated-app').classList.contains('hidden'),true);
+});
+test('expired recovery link returns to login with instructions',async()=>{
+ const {document}=await start(null,{recovery:true});
+ assert.match(document.elements.get('login-message').textContent,/expirou/);
+});
+test('mismatched passwords do not reach auth; valid matching password saves and logs out',async()=>{
+ const {document,calls}=await start({user:{id:'one'}},{recovery:true});
+ const input=document.elements.get('reset-password'),confirm=document.elements.get('reset-password-confirm'),form=document.elements.get('reset-password-form');
+ input.value='new-password-123';confirm.value='different-password';await form.dispatch('submit');assert.deepEqual(calls,[]);
+ confirm.value=input.value;await form.dispatch('submit');assert.deepEqual(calls,[['password','new-password-123'],'logout']);
+ assert.match(document.elements.get('login-message').textContent,/Senha atualizada/);
+});
+test('failed password update keeps recovery form open',async()=>{
+ const {document,calls}=await start({user:{id:'one'}},{recovery:true,updateError:true});
+ document.elements.get('reset-password').value='new-password-123';document.elements.get('reset-password-confirm').value='new-password-123';
+ await document.elements.get('reset-password-form').dispatch('submit');
+ assert.equal(calls.includes('logout'),false);assert.equal(document.elements.get('password-reset-screen').classList.contains('hidden'),false);
+ assert.equal(document.elements.get('reset-password-submit').disabled,false);
+});
+test('SDK recovery event also prevents opening clinic records without query parameters',async()=>{
+ const {document,calls}=await start({user:{id:'one'}},{recoveryEvent:true});
+ assert.deepEqual(calls,[]);assert.equal(document.elements.get('password-reset-screen').classList.contains('hidden'),false);
+});
+test('error callback never opens password form for an existing unrelated session',async()=>{
+ const {document,calls}=await start({user:{id:'one'}},{recovery:true,linkError:true});
+ assert.deepEqual(calls,[]);assert.match(document.elements.get('login-message').textContent,/expirou/);
+ assert.equal(document.elements.get('password-reset-screen').classList.contains('hidden'),true);
 });

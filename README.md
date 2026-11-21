@@ -49,6 +49,8 @@ Os indicadores usam o horário real de início e finalização, com o dia de ref
 
 Novos integrantes usam **Criar meu acesso**, confirmam seu e-mail e aguardam vínculo por um administrador. Criar uma conta não libera acesso a clínicas. Ao cadastrar uma clínica, o superadministrador informa o e-mail já confirmado de seu administrador.
 
+O login oferece **Esqueci minha senha** (link por e-mail e definição de nova senha) e um ícone para mostrar/ocultar a senha. Configure os endereços de recuperação no Supabase conforme [CONFIGURACAO.md](CONFIGURACAO.md#recuperar-senha).
+
 O superadministrador não recebe acesso automático aos relatos de todas as clínicas: a operação clínica exige um vínculo. O último administrador de uma clínica não pode ser removido. Desativar a clínica suspende o acesso aos atendimentos, preservando os registros. Somente administradores com vínculo operacional podem excluir atendimentos fictícios.
 
 ## Prioridade do atendimento
@@ -79,6 +81,8 @@ O Flask consulta os dados salvos usando a sessão do usuário e gera o PDF em me
 Cadastro, consulta e alterações dos atendimentos usam o SDK do Supabase no navegador. As políticas do banco são aplicadas a cada operação. Consultas de detalhes leem o atendimento e suas respostas juntos; alterações de status, prioridade e exclusões comparam a versão lida para detectar mudanças concorrentes.
 
 A chave `OPENROUTER_API_KEY` fica nos Secrets do Supabase. O modelo padrão é `openrouter/free`, sujeito à disponibilidade e aos limites do serviço. Apenas o relato é enviado na geração inicial; a consolidação posterior ocorre no banco, sem novo envio à OpenRouter.
+
+Falhas temporárias na geração inicial recebem uma segunda tentativa automática, com limite de 18 segundos por tentativa. Limites de uso e erros de conta são informados sem repetição automática. Falhas não substituem uma ficha já salva.
 
 `/config.js` é gerado pelo Flask e contém somente a URL e a chave pública. O `.env`, chaves secretas e arquivos Python não são servidos como arquivos estáticos. Não há dependência de `service_role` na aplicação.
 

@@ -17,12 +17,15 @@
         <p class="eyebrow">ACESSO DA CLÍNICA</p><h1>Entre no MedPrior</h1>
         <p class="subtitle">Organize os relatos antes do atendimento.</p>
         <label class="field"><span>E-mail</span><input id="login-email" type="email" autocomplete="username" required /></label>
-        <label class="field"><span>Senha</span><input id="login-password" type="password" autocomplete="current-password" required /></label>
+        <label class="field"><span>Senha</span><span class="password-control"><input id="login-password" type="password" autocomplete="current-password" required /><button id="toggle-login-password" type="button" class="password-toggle" aria-label="Mostrar senha" aria-pressed="false" aria-controls="login-password"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path class="eye-slash hidden" d="m3 3 18 18"/></svg></button></span></label>
         <p id="login-message" role="status">Verificando sua sessão...</p>
         <button id="login-submit" class="button button-primary" type="submit" disabled>Entrar</button>
+        <button type="button" class="text-button" id="forgot-password">Esqueci minha senha</button>
         <button type="button" class="text-button" id="open-signup">Criar meu acesso</button><p class="field-hint">Demonstração acadêmica · Use somente pacientes fictícios.</p>
       </form>
     </section>
+    <dialog id="forgot-password-dialog" class="modal"><form id="forgot-password-form"><div class="modal-heading"><h2>Recuperar senha</h2><button type="button" class="close-button" id="close-forgot-password" aria-label="Fechar">×</button></div><p>Informe o e-mail da sua conta para receber o link de recuperação.</p><label class="field">E-mail<input id="recovery-email" type="email" autocomplete="email" required /></label><button class="button button-primary" type="submit">Enviar link de recuperação</button><p id="recovery-message" role="status"></p></form></dialog>
+    <section id="password-reset-screen" class="login-screen hidden"><form id="reset-password-form" class="login-card"><h1>Definir nova senha</h1><p class="subtitle">Escolha uma senha com pelo menos 12 caracteres.</p><label class="field">Nova senha<input id="reset-password" type="password" autocomplete="new-password" minlength="12" required /></label><label class="field">Confirme a nova senha<input id="reset-password-confirm" type="password" autocomplete="new-password" minlength="12" required /></label><p id="reset-password-message" role="status"></p><button id="reset-password-submit" class="button button-primary" type="submit">Salvar nova senha</button><button id="cancel-password-reset" class="text-button" type="button">Voltar para entrar</button></form></section>
     <div class="app-shell hidden" id="authenticated-app">
       <aside class="sidebar">
         <a class="brand" href="#inicio" aria-label="MedPrior início">

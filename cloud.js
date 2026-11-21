@@ -1,6 +1,8 @@
 // Login pelo Supabase; autorização sempre aplicada no banco.
 window.MedPriorCloud = (() => {
   const config = window.MEDPRIOR_CONFIG;
+  // Capture antes de o SDK consumir/limpar o fragmento do link de Auth.
+  const recoveryLinkError = /(?:^|[#&])error(?:_code)?=/.test(window.location?.hash || '');
   let client = null;
   let connectionError = 'Não foi possível carregar a conexão. Confira sua internet e recarregue a página.';
   if (!config?.supabaseUrl || !config?.supabasePublishableKey) {
@@ -37,7 +39,7 @@ window.MedPriorCloud = (() => {
     return access;
   }
   return {
-    client, bind, map,
+    client, bind, map, recoveryLinkError,
     get access() { return access; },
     get userId() { return userId; },
     get clinicId() { return clinicId; },
@@ -50,6 +52,16 @@ window.MedPriorCloud = (() => {
     async session() { const {data,error} = await requireClient().auth.getSession(); if(error) throw error; return data.session; },
     async login(email,password) { const {data,error} = await requireClient().auth.signInWithPassword({email,password}); if(error) throw error; return data.session; },
     async signup(email,password) { const {data,error} = await requireClient().auth.signUp({email,password}); if(error) throw error; return data; },
+    async requestPasswordReset(email) {
+      const {error} = await requireClient().auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin + '/?recovery=1',
+      });
+      if (error) throw error;
+    },
+    async updatePassword(password) {
+      const {error} = await requireClient().auth.updateUser({password});
+      if (error) throw error;
+    },
     async logout() { const {error} = await requireClient().auth.signOut({scope:'local'}); if(error) throw error; this.clear(); },
     clear() { accessRevision++; clinicId=null; userId=null; access={isAdmin:false,clinics:[],memberships:[]}; },
     async list(offset = 0) {
@@ -92,7 +104,7 @@ window.MedPriorCloud = (() => {
       const session = await this.session();
       if(!session) throw new Error('Entre novamente para gerar a ficha.');
       const response=await fetch(`/api/appointments/${encodeURIComponent(id)}/analysis`,{
-        method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${session.access_token}`},body:JSON.stringify({regenerate})});
+        method:'POST',signal:AbortSignal.timeout(65000),headers:{'Content-Type':'application/json',Authorization:`Bearer ${session.access_token}`},body:JSON.stringify({regenerate})});
       const data=await response.json().catch(()=>null);
       if(!response.ok) throw new Error(data?.error || 'Não foi possível acessar a IA. Tente novamente.');
       if(typeof data?.summary !== 'string') throw new Error('A IA não retornou uma ficha válida.');
