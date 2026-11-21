@@ -6,10 +6,15 @@ const analysis = {version:2, facts:['Dor de cabeça há dois dias; nega febre.']
 const id = '12345678-1234-1234-1234-123456789abc';
 function fixture(options = {}) {
   const state = { requests: [], writes: [] };
-  const item = { id, report: 'Relata dor de cabeça há dois dias. Nega febre.', ai_summary: null, ...options.item };
+  const item = { id, updated_at:'2026-11-21T12:00:00Z', status:'Aguardando', report: 'Relata dor de cabeça há dois dias. Nega febre.', ai_summary: null, ...options.item };
   const db = {
+    async rpc(name,args){assert.equal(name,'consolidate_appointment'); assert.equal(args.p_id,id);state.consolidated=true;return {data:JSON.stringify({version:3,phase:'complete',facts:['Relato'],gaps:[],questions:[],recordedAnswers:options.answers,note:'Rodada encerrada.'}),error:null};},
     auth: { getUser: async () => ({ data: { user: options.unauthorized ? null : { id: 'member' } }, error: null }) },
     from: table => {
+      if (table === 'appointment_answers') {
+        const chain = {select(){return chain;},eq(){return chain;},order(){return chain;},limit:async()=>({data:options.answers || [],error:null})};
+        return chain;
+      }
       assert.equal(table, 'appointments');
       let write;
       const chain = {
@@ -116,7 +121,22 @@ test('regenerate must be boolean', async () => {
 });
 test('rejects incomplete structured analysis', () => {
   assert.equal(parseAnalysis({facts:['x'],questions:['y'],note:'z'}),null);
-  assert.equal(parseAnalysis({...analysis,questions:[]}),null);
+  assert.deepEqual(parseAnalysis({...analysis,questions:[]}).questions,[]);
   assert.equal(parseAnalysis({...analysis,questions:[{html:'x'}]}),null);
   assert.equal(parseAnalysis({...analysis,note:'a'.repeat(221)}),null);
+});
+
+test('saved answers consolidate without another provider request',async()=>{
+ const answers=[{question:'Quando começou?',answer:'Há dois dias.'}];
+ const {handler,state,request}=fixture({answers,noKey:true,item:{analysis_stale:true,ai_summary:JSON.stringify(analysis)}});
+ const response=await handler(request());
+ assert.equal(response.status,200);
+ const summary=JSON.parse((await response.json()).summary);
+ assert.equal(summary.phase,'complete');assert.deepEqual(summary.questions,[]);
+ assert.deepEqual(summary.recordedAnswers,answers);
+ assert.equal(state.requests.length,0);assert.equal(state.consolidated,true);
+});
+test('completed appointment rejects regeneration',async()=>{
+ const {handler,state,request}=fixture({item:{status:'Finalizado'}});
+ assert.equal((await handler(request())).status,409);assert.equal(state.requests.length,0);
 });

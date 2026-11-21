@@ -7,9 +7,10 @@ const cors = {
 const instructions = `Você prepara uma ficha de coleta de informações para relatos fictícios de pré-atendimento.
 Responda em português brasileiro com um objeto JSON, sem Markdown, usando exatamente:
 {"facts":["..."],"gaps":["..."],"questions":["..."],"note":"..."}
-Cada lista deve conter de 1 a 4 frases curtas. A resposta inteira deve ter no máximo 180 palavras.
+facts deve conter de 1 a 4 frases curtas. gaps e questions podem conter de zero a 4 itens. A resposta inteira deve ter no máximo 180 palavras.
 facts: extraia informações explicitamente relatadas, preservando intensidade, duração, negações e incertezas. Não deduza sintomas ausentes nem transforme linguagem leiga em conclusões clínicas.
 gaps: identifique informações relevantes que NÃO constam no relato. Não repita lacunas já respondidas; não trate ausência de menção como negação.
+Considere também as respostas anteriores como informações fornecidas. Não repita perguntas já respondidas. Se não houver lacunas úteis, retorne gaps e questions vazios.
 questions: faça até 4 perguntas específicas para esclarecer essas lacunas. Priorize as que mais completam este relato; não use uma lista genérica igual para todos. Não repita perguntas respondidas. Não formule recomendações disfarçadas de pergunta.
 note: explique em uma frase qual lacuna limita a compreensão do registro, sem avaliar gravidade. Se estiver completo, indique o que precisa ser confirmado com o paciente.
 Limites por item: facts 140 caracteres, gaps 100, questions 120; note 220 caracteres.
@@ -21,7 +22,7 @@ export function parseAnalysis(value) {
     const data = typeof value === 'string' ? JSON.parse(value) : value;
     if (!data || typeof data !== 'object') return null;
     for (const [key, maxLength] of [['facts', 140], ['gaps', 100], ['questions', 120]]) {
-      if (!Array.isArray(data[key]) || data[key].length < 1 || data[key].length > 4 ||
+      if (!Array.isArray(data[key]) || data[key].length < (key === 'facts' ? 1 : 0) || data[key].length > 4 ||
           data[key].some(item => typeof item !== 'string' || !item.trim() || item.length > maxLength)) return null;
     }
     if (typeof data.note !== 'string' || !data.note.trim() || data.note.length > 220) return null;
@@ -58,12 +59,22 @@ export function createHandler({ createClient, env, fetchImpl = fetch }) {
       }
       // Consulta e gravação usam o JWT do usuário, com as políticas RLS da clínica.
       const { data: item, error: readError } = await db.from('appointments')
-        .select('id, report, ai_summary').eq('id', id).maybeSingle();
+        .select('id, report, ai_summary, analysis_stale, updated_at, status').eq('id', id).maybeSingle();
       if (readError) return reply(500, { error: 'Não foi possível consultar o atendimento.' });
       if (!item) return reply(404, { error: 'Atendimento não encontrado ou sem permissão.' });
       // Resumos antigos permanecem visíveis até uma nova ficha ser salva.
       const cached = parseAnalysis(item.ai_summary);
-      if (cached && !body.regenerate) return reply(200, { summary: JSON.stringify(cached) });
+
+      if (item.status === 'Finalizado') return reply(409, { error: 'Atendimento finalizado. A ficha está disponível somente para consulta.' });
+      const { data: answers, error: answersError } = await db.from('appointment_answers')
+        .select('question, answer').eq('appointment_id', id).order('recorded_at', { ascending: true }).limit(40);
+      if (answersError) return reply(500, { error: 'Não foi possível consultar as respostas.' });
+      if (answers.length) {
+        const {data: summary,error} = await db.rpc('consolidate_appointment',{p_id:id});
+        if (error) return reply(500,{error:'Não foi possível consolidar as respostas. Elas continuam salvas.'});
+        return reply(200,{summary});
+      }
+      if (cached && !body.regenerate && !item.analysis_stale) return reply(200, { summary: JSON.stringify(cached) });
       if (!item.report?.trim() || item.report.length > 1200) return reply(422, { error: 'O relato precisa ter entre 1 e 1200 caracteres.' });
       const key = env.get('OPENROUTER_API_KEY');
       if (!key) return reply(503, { error: 'A IA ainda não foi configurada. Cadastre a chave da OpenRouter nos segredos do Supabase.' });
@@ -73,7 +84,7 @@ export function createHandler({ createClient, env, fetchImpl = fetch }) {
         headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'X-Title': 'MedPrior' },
         body: JSON.stringify({
           model: env.get('OPENROUTER_MODEL') || 'openrouter/free',
-          messages: [{ role: 'system', content: instructions }, { role: 'user', content: JSON.stringify({ relato: item.report }) }],
+          messages: [{ role: 'system', content: instructions }, { role: 'user', content: JSON.stringify({ relato: item.report, respostas_anteriores: answers }) }],
           max_tokens: 1400, temperature: 0.2, stream: false, response_format: { type: 'json_object' },
         }),
       });
@@ -92,7 +103,7 @@ export function createHandler({ createClient, env, fetchImpl = fetch }) {
         return reply(502, { error: 'A IA não retornou uma ficha completa e válida. Tente novamente.' });
       }
       // Compara o relato e a versão anterior para não sobrescrever mudanças simultâneas.
-      let update = db.from('appointments').update({ ai_summary: summary }).eq('id', id).eq('report', item.report);
+      let update = db.from('appointments').update({ ai_summary: summary, analysis_stale: false }).eq('id', id).eq('report', item.report).eq('updated_at', item.updated_at);
       update = item.ai_summary === null ? update.is('ai_summary', null) : update.eq('ai_summary', item.ai_summary);
       const { data: saved, error: saveError } = await update.select('ai_summary').maybeSingle();
       if (saveError) return reply(500, { error: 'Não foi possível salvar o resumo. Tente novamente.' });

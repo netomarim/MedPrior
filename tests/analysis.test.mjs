@@ -15,3 +15,15 @@ test('keeps legacy summary visible and offers upgrade',()=>{
  assert.ok(html.includes('Resumo anterior')); assert.ok(!html.includes('<script>'));
 });
 test('empty analysis explains its purpose',()=>assert.ok(render('').includes('perguntas')));
+
+test('completed interview shows saved answers without further questions',()=>{
+ const html=render(JSON.stringify({version:3,phase:'complete',facts:['Relato'],gaps:[],questions:[],recordedAnswers:[{question:'Quando começou?',answer:'Ontem <script>'}],note:'Rodada encerrada.'}));
+ assert.ok(html.includes('Rodada concluída'));assert.ok(html.includes('Ontem &lt;script&gt;'));
+ assert.ok(!html.includes('Perguntas para complementar'));
+});
+
+test('malformed consolidated answers do not crash the detail',()=>{
+ const value=JSON.stringify({version:3,phase:'complete',facts:[],gaps:[],questions:[],recordedAnswers:[null],note:'Stored value'});
+ assert.doesNotThrow(()=>render(value));
+ assert.equal(context.window.MedPriorAnalysis.parse(value),null);
+});

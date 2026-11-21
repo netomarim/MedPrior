@@ -20,7 +20,7 @@
         <label class="field"><span>Senha</span><input id="login-password" type="password" autocomplete="current-password" required /></label>
         <p id="login-message" role="status">Verificando sua sessão...</p>
         <button id="login-submit" class="button button-primary" type="submit" disabled>Entrar</button>
-        <p class="field-hint">Demonstração acadêmica · Use somente pacientes fictícios.</p>
+        <button type="button" class="text-button" id="open-signup">Criar meu acesso</button><p class="field-hint">Demonstração acadêmica · Use somente pacientes fictícios.</p>
       </form>
     </section>
     <div class="app-shell hidden" id="authenticated-app">
@@ -29,21 +29,24 @@
           <span class="brand-mark">+</span><span>medprior<span class="brand-dot">.</span></span>
         </a>
         <div class="workspace-label">CLÍNICA</div>
-        <div class="clinic-switch"><span class="clinic-avatar">V</span><span>Clínica Vida Plena<small>Plano demonstração</small></span><span class="chevron">⌄</span></div>
+        <label class="field clinic-switch"><span>Clínica em operação</span><select id="clinic-select" aria-label="Clínica em operação"></select></label>
+        <p id="account-role" class="access-label"></p>
         <div class="nav-label">MENU PRINCIPAL</div>
         <nav class="nav-list">
           <button class="nav-item active" data-view="inicio"><span class="nav-icon">◫</span>Visão geral</button>
           <button class="nav-item" data-view="atendimentos"><span class="nav-icon">▤</span>Atendimentos<span class="nav-count" id="nav-count">0</span></button>
+          <button class="nav-item hidden" id="nav-clinicas" data-view="clinicas">Clínicas</button>
+          <button class="nav-item hidden" id="nav-equipe" data-view="equipe">Equipe e acessos</button>
         </nav>
         <div class="sidebar-bottom">
-          <div class="help-card"><div class="help-icon">?</div><strong>Precisa de ajuda?</strong><p>Veja como organizar os pré-atendimentos da sua clínica.</p><a href="#sobre">Conhecer o sistema <span>↗</span></a></div>
+          <div class="help-card"><div class="help-icon">?</div><strong>Precisa de ajuda?</strong><p>Veja como organizar os pré-atendimentos da sua clínica.</p><a href="#" id="about-system">Conhecer o sistema <span>↗</span></a></div>
           <div class="profile"><span class="profile-avatar" id="profile-avatar">MP</span><span><strong id="profile-email">Equipe da clínica</strong><small>Conta conectada</small></span></div>
           <button class="button button-secondary" id="logout-button">Sair da conta</button>
         </div>
       </aside>
 
       <main class="main-content">
-        <header class="topbar"><div class="breadcrumb">Workspace <span>/</span> <strong id="crumb-current">Visão geral</strong></div><div class="top-actions"><span class="demo-pill"><i></i> Ambiente de demonstração</span><button class="icon-button" aria-label="Notificações">♧<b></b></button></div></header>
+        <header class="topbar"><div class="breadcrumb">Workspace <span>/</span> <strong id="crumb-current">Visão geral</strong></div><div class="top-actions"><span class="demo-pill"><i></i> Ambiente de demonstração</span><button class="text-button" id="refresh-access">Atualizar acesso</button></div></header>
 
         <section id="view-inicio" class="view">
           <div class="page-heading"><div><p class="eyebrow" id="today-label"></p><h1>Visão geral <span class="wave">✳</span></h1><p class="subtitle">Aqui está o resumo dos pré-atendimentos da sua clínica.</p></div><button class="button button-primary" id="new-from-home"><span>＋</span> Novo atendimento</button></div>
@@ -52,13 +55,13 @@
             <article class="stat-card"><div class="stat-top"><span>Na fila</span><span class="stat-icon blue">▤</span></div><div class="stat-value" id="stat-waiting">0</div><div class="stat-note"><span class="muted-dot"></span> aguardando atendimento</div></article>
             <article class="stat-card"><div class="stat-top"><span>Em atendimento</span><span class="stat-icon orange">◷</span></div><div class="stat-value" id="stat-progress">0</div><div class="stat-note">neste momento</div></article>
             <article class="stat-card"><div class="stat-top"><span>Finalizados hoje</span><span class="stat-icon green">✓</span></div><div class="stat-value" id="stat-done">0</div><div class="stat-note">atendimentos concluídos</div></article>
-            <article class="stat-card"><div class="stat-top"><span>Tempo médio</span><span class="stat-icon purple">⌁</span></div><div class="stat-value">— <small>min</small></div><div class="stat-note">disponível após os primeiros registros</div></article>
+            <article class="stat-card"><div class="stat-top"><span>Tempo médio</span><span class="stat-icon purple">⌁</span></div><div class="stat-value"><span id="stat-average">—</span> <small>min</small></div><div class="stat-note">atendimentos finalizados com duração registrada</div></article>
           </div>
 
           <section class="panel queue-panel">
             <div class="panel-heading"><div><h2>Fila de pré-atendimento</h2><p>Relatos organizados para a equipe revisar antes da consulta.</p></div><button class="text-button" data-go="atendimentos">Ver todos <span>→</span></button></div>
-            <div class="table-wrap"><table><thead><tr><th>PACIENTE</th><th>RELATO</th><th>REGISTRADO</th><th>STATUS</th><th></th></tr></thead><tbody id="queue-rows"></tbody></table></div>
-            <div class="empty-state" id="queue-empty"><div class="empty-illustration"><span>▤</span><i>＋</i></div><strong>Nenhum atendimento por aqui</strong><p>Quando um novo pré-atendimento for registrado, ele aparecerá nesta lista.</p><button class="button button-secondary" id="new-empty">＋ Registrar atendimento</button></div>
+            <div class="table-wrap"><table><thead><tr><th>PACIENTE</th><th>RELATO</th><th>REGISTRADO</th><th>PRIORIDADE</th><th>STATUS</th><th></th></tr></thead><tbody id="queue-rows"></tbody></table></div>
+            <div class="empty-state" id="queue-empty"><div class="empty-illustration"><span>▤</span><i>＋</i></div><strong>Nenhum atendimento na fila</strong><p>Atendimentos aguardando ou em andamento aparecem aqui, por ordem de chegada.</p><button class="button button-secondary" id="new-empty">＋ Registrar atendimento</button></div>
           </section>
           <div class="privacy-note"><span>ⓘ</span> Protótipo acadêmico. Use apenas informações fictícias; a IA não realiza diagnóstico nem classificação de risco.</div>
         </section>
@@ -66,12 +69,23 @@
         <section id="view-atendimentos" class="view hidden">
           <div class="page-heading compact"><div><p class="eyebrow">GESTÃO DA CLÍNICA</p><h1>Atendimentos</h1><p class="subtitle">Acompanhe e organize os pré-atendimentos registrados.</p></div><button class="button button-primary" id="new-from-list"><span>＋</span> Novo atendimento</button></div>
           <section class="panel list-panel"><div class="list-toolbar"><div class="search-box"><span>⌕</span><input id="search-input" type="search" placeholder="Buscar paciente ou relato" /></div><div class="filter-tabs"><button class="filter-tab selected" data-filter="Todos">Todos <span id="count-all">0</span></button><button class="filter-tab" data-filter="Aguardando">Aguardando</button><button class="filter-tab" data-filter="Em atendimento">Em atendimento</button><button class="filter-tab" data-filter="Finalizado">Finalizados</button></div></div>
-            <div class="table-wrap"><table><thead><tr><th>PACIENTE</th><th>RELATO</th><th>REGISTRADO</th><th>STATUS</th><th></th></tr></thead><tbody id="all-rows"></tbody></table></div>
-            <div class="empty-state" id="list-empty"><div class="empty-illustration"><span>▤</span><i>＋</i></div><strong>Nenhum registro encontrado</strong><p>Cadastre um atendimento para começar a organizar os relatos.</p></div>
+            <div class="table-wrap"><table><thead><tr><th>PACIENTE</th><th>RELATO</th><th>REGISTRADO</th><th>PRIORIDADE</th><th>STATUS</th><th></th></tr></thead><tbody id="all-rows"></tbody></table></div>
+            <p id="loaded-count" class="field-hint"></p><button class="button button-secondary hidden" id="load-more">Carregar mais atendimentos</button><div class="empty-state" id="list-empty"><div class="empty-illustration"><span>▤</span><i>＋</i></div><strong>Nenhum registro encontrado</strong><p>Cadastre um atendimento para começar a organizar os relatos.</p></div>
           </section>
           <div class="privacy-note"><span>ⓘ</span> Dados de demonstração salvos na conta da clínica. <button class="text-button" id="refresh-appointments">Atualizar lista</button></div>
         </section>
 
+        <section id="view-no-clinic" class="view hidden"><div class="panel access-panel"><h1>Acesso criado</h1><p>Sua conta está autenticada, mas não possui vínculo com uma clínica ativa. Informe seu e-mail ao administrador da clínica. Depois do vínculo, clique em “Atualizar acesso”.</p><p>Pacientes não precisam criar conta: o atendente registra o relato e as respostas informadas por eles.</p></div></section>
+        <section id="view-clinicas" class="view hidden">
+          <div class="page-heading"><div><h1>Clínicas</h1><p class="subtitle">Administração da plataforma. Somente o superadministrador cadastra e ativa clínicas.</p></div></div>
+          <form id="clinic-form" class="panel access-panel"><h2>Cadastrar clínica</h2><div class="form-grid"><label class="field">Nome da clínica<input name="name" required minlength="2" maxlength="100"></label><label class="field">E-mail do administrador<input name="owner" type="email" required></label></div><p>O administrador deve criar e confirmar sua conta em “Criar meu acesso” antes do vínculo.</p><button class="button button-primary" type="submit">Cadastrar clínica</button><p id="clinic-message" role="status"></p></form>
+          <div class="panel access-panel"><h2>Clínicas cadastradas</h2><div id="clinics-list"></div><p>Desativar uma clínica suspende o acesso aos atendimentos, preservando os registros.</p></div>
+        </section>
+        <section id="view-equipe" class="view hidden">
+          <div class="page-heading"><div><h1>Equipe e acessos</h1><p class="subtitle">Vincule contas existentes à clínica e controle quem pode acessar seus registros.</p></div></div>
+          <div class="panel access-panel"><label class="field">Clínica administrada<select id="team-clinic"></select></label><div id="team-list"></div></div>
+          <form id="member-form" class="panel access-panel"><h2>Adicionar integrante</h2><div class="form-grid"><label class="field">E-mail confirmado<input type="email" name="email" required></label><label class="field">Perfil<select name="role" id="member-role"><option value="staff">Atendente / equipe</option><option value="owner" id="owner-option">Administrador da clínica</option></select></label></div><p>O integrante cria e confirma a própria conta. Administradores da clínica podem adicionar e remover atendentes; somente o superadministrador define administradores.</p><button class="button button-primary" type="submit">Vincular à clínica</button><p id="team-message" role="status"></p></form>
+        </section>
         <footer class="footer"><span>© 2026 MedPrior · Projeto acadêmico</span><span>Feito para apoiar a organização do pré-atendimento</span></footer>
       </main>
     </div>
@@ -80,10 +94,11 @@
       <form id="appointment-form" method="dialog">
         <div class="modal-heading"><div><p class="eyebrow">NOVO REGISTRO</p><h2>Novo pré-atendimento</h2><p class="subtitle">Registre o relato para a equipe revisar antes da consulta.</p></div><button type="button" class="close-button" id="close-modal" aria-label="Fechar">×</button></div>
         <div class="form-grid"><label class="field"><span>Nome ou identificador do paciente <b>*</b></span><input name="patient" maxlength="80" placeholder="Ex.: Paciente 01" required /></label><label class="field"><span>Idade <small>(opcional)</small></span><div class="input-suffix"><input name="age" type="number" min="0" max="120" placeholder="Ex.: 35" /><i>anos</i></div></label><label class="field full"><span>Relato do paciente <b>*</b></span><textarea name="report" rows="4" maxlength="1200" placeholder="Descreva com as palavras do paciente o motivo da consulta..." required></textarea><small class="field-hint">Evite incluir dados reais neste protótipo acadêmico.</small></label></div>
-        <div class="modal-actions"><button type="button" class="button button-secondary" id="cancel-modal">Cancelar</button><button type="submit" class="button button-primary">Salvar atendimento <span>→</span></button></div>
+        <label class="field">Quem forneceu o relato?<select name="reportSource"><option value="patient">Paciente, registrado pelo atendente</option><option value="companion">Acompanhante, registrado pelo atendente</option><option value="staff">Observação da equipe</option></select></label><p class="field-hint">O paciente informa os sintomas; a equipe registra em sua conta. Não entregue seu login ao paciente.</p><div class="modal-actions"><button type="button" class="button button-secondary" id="cancel-modal">Cancelar</button><button type="submit" class="button button-primary">Salvar atendimento <span>→</span></button></div>
       </form>
     </dialog>
 
+    <dialog id="signup-dialog" class="modal"><form id="signup-form"><div class="modal-heading"><h2>Criar meu acesso</h2><button type="button" class="close-button" id="close-signup" aria-label="Fechar">×</button></div><label class="field">E-mail<input name="email" type="email" autocomplete="username" required></label><label class="field">Senha<input name="password" type="password" autocomplete="new-password" minlength="12" required></label><p class="field-hint">Use pelo menos 12 caracteres. Criar conta não dá acesso às clínicas. Depois da confirmação do e-mail, aguarde o vínculo pelo administrador.</p><button class="button button-primary" type="submit">Criar acesso</button><p id="signup-message" role="status"></p></form></dialog>
     <dialog id="detail-dialog" class="modal detail-modal"><div id="detail-content"></div></dialog>
     <div class="toast" id="toast" role="status"></div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/dist/umd/supabase.js"></script>
