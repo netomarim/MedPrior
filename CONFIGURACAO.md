@@ -1,24 +1,31 @@
-# Configuração atual do MedPrior
+# Configuração do MedPrior
 
-O projeto Supabase já está criado, as três tabelas estão com RLS e o usuário da demonstração já foi associado à clínica. A URL e a chave publishable estão em `config.js`.
+## Servidor Python
 
-Para iniciar, dê dois cliques em `iniciar.cmd`, mantenha o terminal aberto e acesse http://127.0.0.1:3000. Use o e-mail e a senha definidos em Authentication. Nunca envie a senha no chat.
+Instale as dependências com python -m pip install -r requirements.txt.
+Execute iniciar.cmd ou python app.py. Abra http://127.0.0.1:3000.
 
-## OpenRouter — próxima etapa
+O .env local tem três variáveis:
 
-1. Crie a conta e uma chave em https://openrouter.ai/keys.
-2. Guarde a chave; ela será cadastrada no Supabase em Edge Functions → Secrets como `OPENROUTER_API_KEY`.
-3. Não coloque essa chave no HTML, JavaScript ou em `config.js`.
-4. A função no servidor verificará a sessão e o acesso ao atendimento antes de solicitar um resumo neutro, sem diagnóstico, tratamento ou classificação de risco.
+- SUPABASE_URL: URL do projeto.
+- SUPABASE_PUBLISHABLE_KEY: chave pública do projeto, nunca secret ou service_role.
+- PORT: porta local, padrão 3000.
 
-A chamada à IA será implementada na próxima etapa. A interface atual comunica que o resumo está indisponível.
+O .env já está configurado nesta máquina e está ignorado pelo Git. Para outra máquina, copie .env.example para .env e preencha a chave pública. A senha de login continua sendo digitada somente na interface e validada pelo Supabase Auth.
 
-## Copiar para Downloads
+## IA e chave OpenRouter
 
-O ambiente atual escreve na pasta de trabalho. Para copiar o projeto para Downloads, use PowerShell:
+A chave já cadastrada permanece em Edge Functions → Secrets no Supabase:
+https://supabase.com/dashboard/project/oexmbzplxnmphciosscg/functions/secrets
 
-```powershell
-Copy-Item -LiteralPath "$env:USERPROFILE\Documents\Codex\2026-11-21\new-chat\MedPrior" -Destination "$env:USERPROFILE\Downloads\MedPrior" -Recurse
-```
+OPENROUTER_API_KEY é usada somente na função do Supabase. Não copie a chave para o navegador ou para config.js. O Flask encaminha a solicitação autenticada à função, sem ter acesso à chave da OpenRouter.
 
-Se já existir uma cópia em Downloads, confirme o destino e evite misturar duas versões durante o desenvolvimento. A cópia em Downloads não é atualizada automaticamente por esta sessão.
+O modelo padrão é openrouter/free. OPENROUTER_MODEL é uma configuração opcional nos Secrets do Supabase; confira o preço antes de escolher um modelo pago.
+
+## Usar a nova ficha
+
+Entre, crie um atendimento fictício e abra seus detalhes. Clique em “Gerar ficha com IA”. Para um atendimento com resumo antigo, clique em “Atualizar ficha com IA”. A ficha apresenta informações identificadas, lacunas, perguntas e observação sobre o registro.
+
+O resultado precisa ser revisado. Não representa avaliação clínica. O texto do relato é enviado à OpenRouter; não inclua dados reais nele.
+
+O timeout de geração é de 45 segundos na função e até 55 segundos de espera no Flask. Se houver erro, o resumo anterior permanece salvo. Sessão expirada pede novo login; limites e problemas de configuração são informados na interface.

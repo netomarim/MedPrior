@@ -1,33 +1,42 @@
 # MedPrior
 
-Projeto acadêmico para organizar relatos de pré-atendimento de uma clínica. Use apenas pacientes fictícios.
+Projeto acadêmico para organizar relatos fictícios de pré-atendimento.
 
 ## Executar
 
-Requer Node.js e internet. Dê dois cliques em `iniciar.cmd` e abra http://127.0.0.1:3000. Alternativamente, execute `node server.cjs` nesta pasta. Não é necessário instalar pacotes.
+Requer Python 3.10 ou superior e internet. Instale as dependências:
 
-Entre com o e-mail e a senha do usuário criado no Supabase Authentication. A senha é enviada apenas ao Supabase Auth. A biblioteca oficial gerencia a sessão e a renovação de tokens no navegador. Sair encerra a sessão local e limpa os dados exibidos.
+    python -m pip install -r requirements.txt
 
-## Implementado
+Copie .env.example para .env e informe a URL e a chave pública do Supabase. Nesta máquina, o .env já foi preenchido com a configuração pública do projeto.
 
-- Login, restauração da sessão e logout com Supabase Auth.
-- Clínica obtida a partir do vínculo do usuário autenticado.
-- Cadastro, listagem, pesquisa, filtros, alteração de status e exclusão no Postgres.
-- Acesso aos registros limitado por clínica pelas políticas RLS do banco.
-- Mensagens de falha sem mostrar uma gravação como concluída antes da confirmação do banco.
+Execute iniciar.cmd ou:
 
-A interface usa HTML, CSS e JavaScript. Supabase JS 2.49.8 é carregado via CDN jsDelivr com versão fixa. `config.js` contém apenas URL e chave publishable públicas. Não há secret key ou service_role no cliente.
+    python app.py
 
-## Situação atual
+Abra http://127.0.0.1:3000 e entre com a conta do Supabase Authentication. O Flask usa a porta definida em PORT no .env, com padrão 3000. O servidor de desenvolvimento atende apenas a máquina local, com debug desativado.
 
-O Supabase MedPrior já está configurado. O usuário da demonstração está vinculado à Clínica Vida Plena como owner. `supabase/schema.sql` registra a proposta inicial e não deve ser executado novamente no banco configurado. As tabelas, políticas e o gatilho de atualização foram criados pelo SQL Editor.
+## Arquitetura
 
-A interface carrega até 500 atendimentos recentes. Registros da antiga demonstração no localStorage não são importados automaticamente. A IA ainda não está conectada: o detalhe mostra essa indisponibilidade. A próxima entrega será uma Edge Function autenticada que consulte o atendimento sob RLS e chame a OpenRouter com uma chave guardada como segredo no servidor.
+- Interface: HTML, CSS e JavaScript.
+- Servidor local e API: Python com Flask, em app.py.
+- Login e banco: Supabase Auth e PostgreSQL, com acesso limitado por clínica por RLS.
+- IA: a interface envia a solicitação ao Flask em POST /api/appointments/<id>/analysis. O Flask encaminha o JWT à Edge Function summarize-appointment, que valida o usuário, consulta o relato sob RLS e chama a OpenRouter.
+- A chave OPENROUTER_API_KEY continua nos Secrets do Supabase. Não é necessário copiá-la para o .env.
 
-## Verificação
+O Flask gera /config.js em tempo de execução contendo somente a URL e a chave pública. .env e arquivos Python não são servidos como arquivos estáticos. A aplicação não utiliza service_role nem depende de Node.js para executar.
 
-O ciclo de cadastrar, consultar, mudar status e excluir foi validado sob o papel authenticated com o usuário de demonstração, dentro de uma transação revertida. Uma conta sem vínculo foi impedida de consultar dados e inserir atendimentos. A sintaxe dos arquivos JavaScript foi conferida. O login com a senha real deve ser feito pelo usuário no navegador.
+A ficha de IA contém informações identificadas, lacunas, perguntas específicas e uma observação sobre o registro. Não determina diagnósticos, tratamentos ou classificação de risco. Confira o resultado com o relato e o paciente. Só o texto do relato é enviado à OpenRouter; use dados fictícios inclusive dentro do relato.
 
-## Entrega
+O conteúdo estruturado continua salvo em appointments.ai_summary. Não foi necessário alterar o banco. Resumos antigos permanecem disponíveis; clique em “Atualizar ficha com IA” para substituí-los pelo novo formato. Falhas preservam o conteúdo anterior. Atualizações concorrentes não são sobrescritas silenciosamente.
 
-Integrantes: preencher antes da entrega. GitHub, PDF e demonstração da IA serão preparados nas etapas finais.
+Cadastro, listagem, filtros, status e exclusão continuam usando o SDK do Supabase no navegador. A listagem carrega até 500 atendimentos recentes. O indicador “Finalizados hoje” ainda usa a data de criação, uma limitação conhecida desta versão.
+
+## Verificar
+
+    python -m unittest discover -s tests -p test_*.py
+    node --test tests/summarize.test.mjs tests/analysis.test.mjs
+
+Python verifica o servidor e sua API. Os testes JavaScript verificam a Edge Function e a apresentação da ficha, com serviços simulados. Node.js só é necessário para executar esses testes. O teste completo com a OpenRouter exige uma sessão autenticada no navegador.
+
+supabase/schema.sql é a proposta inicial; não execute novamente sobre o projeto configurado.

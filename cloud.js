@@ -46,6 +46,20 @@ window.MedPriorCloud = (() => {
         .select().single();
       if(error) throw error; return map(data);
     },
+    async summarize(id, regenerate = false) {
+      requireClinic();
+      const { data: sessionData, error: sessionError } = await client.auth.getSession();
+      if (sessionError || !sessionData.session) throw new Error('Entre novamente para gerar a ficha.');
+      const response = await fetch(`/api/appointments/${encodeURIComponent(id)}/analysis`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessionData.session.access_token}` },
+        body: JSON.stringify({ regenerate }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || 'Não foi possível acessar a IA. Confira sua conexão e tente novamente.');
+      if (typeof data?.summary !== 'string' || !data.summary.trim()) throw new Error('A IA não retornou um resumo válido.');
+      return data.summary;
+    },
     async updateStatus(id,status) {
       requireClinic();
       const {data,error} = await client.from('appointments').update({status}).eq('clinic_id',clinicId).eq('id',id).select().single();

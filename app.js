@@ -1,5 +1,7 @@
 let appointments = [];
 const cloud = window.MedPriorCloud;
+const pendingSummaries = new Set();
+let sessionVersion = 0;
 let currentFilter = 'Todos';
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -45,8 +47,39 @@ function showToast(message) {
 function bindDetailButtons() { $$('[data-detail]').forEach(button => button.addEventListener('click', () => openDetail(button.dataset.detail))); }
 function openDetail(id) {
   const item = appointments.find(a => a.id === id); if (!item) return;
-  $('#detail-content').innerHTML = `<div class="detail-top"><div><p class="eyebrow">PRÉ-ATENDIMENTO</p><h2 class="detail-name">${escapeHtml(item.patient)}</h2><div class="detail-meta">${item.age ? `${escapeHtml(item.age)} anos · ` : ''}Registrado às ${formatTime(item.createdAt)}</div></div><button class="close-button" id="close-detail" aria-label="Fechar">×</button></div><div class="detail-section"><h3>Relato informado</h3><div class="detail-report">${escapeHtml(item.report)}</div></div><div class="ai-card"><div class="ai-card-title">✦ Resumo organizado</div><p>${escapeHtml(item.aiSummary || 'O resumo por IA será habilitado quando a conexão com o serviço estiver configurada. Neste protótipo, revise o relato original acima.')}</p><div class="ai-demo-label">A equipe deve conferir as informações com o paciente. Não é uma avaliação clínica.</div></div><div class="detail-actions"><button class="delete-link" id="delete-appointment">Excluir registro</button><label>Status <select class="status-select" id="detail-status"><option ${item.status==='Aguardando'?'selected':''}>Aguardando</option><option ${item.status==='Em atendimento'?'selected':''}>Em atendimento</option><option ${item.status==='Finalizado'?'selected':''}>Finalizado</option></select></label></div>`;
+  $('#detail-content').innerHTML = `<div class="detail-top"><div><p class="eyebrow">PRÉ-ATENDIMENTO</p><h2 class="detail-name">${escapeHtml(item.patient)}</h2><div class="detail-meta">${item.age ? `${escapeHtml(item.age)} anos · ` : ''}Registrado às ${formatTime(item.createdAt)}</div></div><button class="close-button" id="close-detail" aria-label="Fechar">×</button></div><div class="detail-section"><h3>Relato informado</h3><div class="detail-report">${escapeHtml(item.report)}</div></div><div class="ai-card"><div class="ai-card-title">Ficha de pré-atendimento com IA</div><div id="ai-summary" aria-live="polite">${window.MedPriorAnalysis.render(item.aiSummary)}</div><p id="ai-message" role="status"></p><button type="button" class="button button-secondary" id="generate-summary" ${pendingSummaries.has(id) ? 'disabled' : ''}>${pendingSummaries.has(id) ? 'Gerando ficha...' : item.aiSummary ? 'Atualizar ficha com IA' : 'Gerar ficha com IA'}</button><div class="ai-demo-label">Conteúdo gerado por IA, sujeito a erros. Confira com o relato original e com o paciente. Não é uma avaliação clínica.</div></div><div class="detail-actions"><button class="delete-link" id="delete-appointment">Excluir registro</button><label>Status <select class="status-select" id="detail-status"><option ${item.status==='Aguardando'?'selected':''}>Aguardando</option><option ${item.status==='Em atendimento'?'selected':''}>Em atendimento</option><option ${item.status==='Finalizado'?'selected':''}>Finalizado</option></select></label></div>`;
+  $('#detail-dialog').dataset.appointmentId = id;
   $('#detail-dialog').showModal();
+  const summaryButton = $('#generate-summary');
+  const summaryText = $('#ai-summary');
+  const summaryMessage = $('#ai-message');
+  const version = sessionVersion;
+  summaryButton.addEventListener('click', async () => {
+    if (pendingSummaries.has(id)) return;
+    pendingSummaries.add(id); summaryButton.disabled = true;
+    summaryButton.textContent = 'Gerando ficha...'; summaryMessage.textContent = 'Aguarde, isso pode levar alguns segundos.';
+    try {
+      const summary = await cloud.summarize(id, Boolean(appointments.find(a => a.id === id)?.aiSummary));
+      if (version !== sessionVersion) return;
+      appointments = appointments.map(a => a.id === id ? { ...a, aiSummary: summary } : a);
+      // Uma reabertura do detalhe ganha novos elementos; não altera outro atendimento.
+      if ($('#generate-summary') === summaryButton) {
+        summaryText.innerHTML = window.MedPriorAnalysis.render(summary); summaryMessage.textContent = 'Ficha salva.';
+        summaryButton.textContent = 'Atualizar ficha com IA'; summaryButton.disabled = false;
+      } else if ($('#detail-dialog').open && $('#detail-dialog').dataset.appointmentId === id) {
+        $('#detail-dialog').close(); openDetail(id);
+      }
+    } catch (error) {
+      if (version === sessionVersion && $('#generate-summary') === summaryButton) {
+        summaryMessage.textContent = error.message; summaryButton.textContent = 'Tentar novamente'; summaryButton.disabled = false;
+      }
+    } finally {
+      pendingSummaries.delete(id);
+      if (version === sessionVersion && $('#generate-summary') !== summaryButton && $('#detail-dialog').open && $('#detail-dialog').dataset.appointmentId === id) {
+        $('#detail-dialog').close(); openDetail(id);
+      }
+    }
+  });
   $('#close-detail').addEventListener('click', () => $('#detail-dialog').close());
   $('#detail-status').addEventListener('change', async event => {
     const select = event.target; select.disabled = true;
@@ -91,6 +124,7 @@ $('#today-label').textContent = new Intl.DateTimeFormat('pt-BR', { weekday: 'lon
 render();
 
 function showLogin(message = '') {
+  sessionVersion++; pendingSummaries.clear();
   appointments = []; cloud.clear(); render();
   $$('dialog[open]').forEach(dialog => dialog.close());
   $('#authenticated-app').classList.add('hidden'); $('#login-screen').classList.remove('hidden');

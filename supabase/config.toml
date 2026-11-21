@@ -1,0 +1,2 @@
+[functions.summarize-appointment]
+verify_jwt = true
