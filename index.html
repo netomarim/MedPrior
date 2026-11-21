@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f7f8fa" />
+    <title>MedPrior — Pré-atendimento</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <section id="login-screen" class="login-screen">
+      <form id="login-form" class="login-card">
+        <a class="brand" href="#"><span class="brand-mark">+</span><span>medprior.</span></a>
+        <p class="eyebrow">ACESSO DA CLÍNICA</p><h1>Entre no MedPrior</h1>
+        <p class="subtitle">Organize os relatos antes do atendimento.</p>
+        <label class="field"><span>E-mail</span><input id="login-email" type="email" autocomplete="username" required /></label>
+        <label class="field"><span>Senha</span><input id="login-password" type="password" autocomplete="current-password" required /></label>
+        <p id="login-message" role="status">Verificando sua sessão...</p>
+        <button id="login-submit" class="button button-primary" type="submit" disabled>Entrar</button>
+        <p class="field-hint">Demonstração acadêmica · Use somente pacientes fictícios.</p>
+      </form>
+    </section>
+    <div class="app-shell hidden" id="authenticated-app">
+      <aside class="sidebar">
+        <a class="brand" href="#inicio" aria-label="MedPrior início">
+          <span class="brand-mark">+</span><span>medprior<span class="brand-dot">.</span></span>
+        </a>
+        <div class="workspace-label">CLÍNICA</div>
+        <div class="clinic-switch"><span class="clinic-avatar">V</span><span>Clínica Vida Plena<small>Plano demonstração</small></span><span class="chevron">⌄</span></div>
+        <div class="nav-label">MENU PRINCIPAL</div>
+        <nav class="nav-list">
+          <button class="nav-item active" data-view="inicio"><span class="nav-icon">◫</span>Visão geral</button>
+          <button class="nav-item" data-view="atendimentos"><span class="nav-icon">▤</span>Atendimentos<span class="nav-count" id="nav-count">0</span></button>
+        </nav>
+        <div class="sidebar-bottom">
+          <div class="help-card"><div class="help-icon">?</div><strong>Precisa de ajuda?</strong><p>Veja como organizar os pré-atendimentos da sua clínica.</p><a href="#sobre">Conhecer o sistema <span>↗</span></a></div>
+          <div class="profile"><span class="profile-avatar" id="profile-avatar">MP</span><span><strong id="profile-email">Equipe da clínica</strong><small>Conta conectada</small></span></div>
+          <button class="button button-secondary" id="logout-button">Sair da conta</button>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar"><div class="breadcrumb">Workspace <span>/</span> <strong id="crumb-current">Visão geral</strong></div><div class="top-actions"><span class="demo-pill"><i></i> Ambiente de demonstração</span><button class="icon-button" aria-label="Notificações">♧<b></b></button></div></header>
+
+        <section id="view-inicio" class="view">
+          <div class="page-heading"><div><p class="eyebrow" id="today-label"></p><h1>Visão geral <span class="wave">✳</span></h1><p class="subtitle">Aqui está o resumo dos pré-atendimentos da sua clínica.</p></div><button class="button button-primary" id="new-from-home"><span>＋</span> Novo atendimento</button></div>
+
+          <div class="stats-grid">
+            <article class="stat-card"><div class="stat-top"><span>Na fila</span><span class="stat-icon blue">▤</span></div><div class="stat-value" id="stat-waiting">0</div><div class="stat-note"><span class="muted-dot"></span> aguardando atendimento</div></article>
+            <article class="stat-card"><div class="stat-top"><span>Em atendimento</span><span class="stat-icon orange">◷</span></div><div class="stat-value" id="stat-progress">0</div><div class="stat-note">neste momento</div></article>
+            <article class="stat-card"><div class="stat-top"><span>Finalizados hoje</span><span class="stat-icon green">✓</span></div><div class="stat-value" id="stat-done">0</div><div class="stat-note">atendimentos concluídos</div></article>
+            <article class="stat-card"><div class="stat-top"><span>Tempo médio</span><span class="stat-icon purple">⌁</span></div><div class="stat-value">— <small>min</small></div><div class="stat-note">disponível após os primeiros registros</div></article>
+          </div>
+
+          <section class="panel queue-panel">
+            <div class="panel-heading"><div><h2>Fila de pré-atendimento</h2><p>Relatos organizados para a equipe revisar antes da consulta.</p></div><button class="text-button" data-go="atendimentos">Ver todos <span>→</span></button></div>
+            <div class="table-wrap"><table><thead><tr><th>PACIENTE</th><th>RELATO</th><th>REGISTRADO</th><th>STATUS</th><th></th></tr></thead><tbody id="queue-rows"></tbody></table></div>
+            <div class="empty-state" id="queue-empty"><div class="empty-illustration"><span>▤</span><i>＋</i></div><strong>Nenhum atendimento por aqui</strong><p>Quando um novo pré-atendimento for registrado, ele aparecerá nesta lista.</p><button class="button button-secondary" id="new-empty">＋ Registrar atendimento</button></div>
+          </section>
+          <div class="privacy-note"><span>ⓘ</span> Protótipo acadêmico. Use apenas informações fictícias; a IA não realiza diagnóstico nem classificação de risco.</div>
+        </section>
+
+        <section id="view-atendimentos" class="view hidden">
+          <div class="page-heading compact"><div><p class="eyebrow">GESTÃO DA CLÍNICA</p><h1>Atendimentos</h1><p class="subtitle">Acompanhe e organize os pré-atendimentos registrados.</p></div><button class="button button-primary" id="new-from-list"><span>＋</span> Novo atendimento</button></div>
+          <section class="panel list-panel"><div class="list-toolbar"><div class="search-box"><span>⌕</span><input id="search-input" type="search" placeholder="Buscar paciente ou relato" /></div><div class="filter-tabs"><button class="filter-tab selected" data-filter="Todos">Todos <span id="count-all">0</span></button><button class="filter-tab" data-filter="Aguardando">Aguardando</button><button class="filter-tab" data-filter="Em atendimento">Em atendimento</button><button class="filter-tab" data-filter="Finalizado">Finalizados</button></div></div>
+            <div class="table-wrap"><table><thead><tr><th>PACIENTE</th><th>RELATO</th><th>REGISTRADO</th><th>STATUS</th><th></th></tr></thead><tbody id="all-rows"></tbody></table></div>
+            <div class="empty-state" id="list-empty"><div class="empty-illustration"><span>▤</span><i>＋</i></div><strong>Nenhum registro encontrado</strong><p>Cadastre um atendimento para começar a organizar os relatos.</p></div>
+          </section>
+          <div class="privacy-note"><span>ⓘ</span> Dados de demonstração salvos na conta da clínica. <button class="text-button" id="refresh-appointments">Atualizar lista</button></div>
+        </section>
+
+        <footer class="footer"><span>© 2026 MedPrior · Projeto acadêmico</span><span>Feito para apoiar a organização do pré-atendimento</span></footer>
+      </main>
+    </div>
+
+    <dialog id="appointment-dialog" class="modal">
+      <form id="appointment-form" method="dialog">
+        <div class="modal-heading"><div><p class="eyebrow">NOVO REGISTRO</p><h2>Novo pré-atendimento</h2><p class="subtitle">Registre o relato para a equipe revisar antes da consulta.</p></div><button type="button" class="close-button" id="close-modal" aria-label="Fechar">×</button></div>
+        <div class="form-grid"><label class="field"><span>Nome ou identificador do paciente <b>*</b></span><input name="patient" maxlength="80" placeholder="Ex.: Paciente 01" required /></label><label class="field"><span>Idade <small>(opcional)</small></span><div class="input-suffix"><input name="age" type="number" min="0" max="120" placeholder="Ex.: 35" /><i>anos</i></div></label><label class="field full"><span>Relato do paciente <b>*</b></span><textarea name="report" rows="4" maxlength="1200" placeholder="Descreva com as palavras do paciente o motivo da consulta..." required></textarea><small class="field-hint">Evite incluir dados reais neste protótipo acadêmico.</small></label></div>
+        <div class="modal-actions"><button type="button" class="button button-secondary" id="cancel-modal">Cancelar</button><button type="submit" class="button button-primary">Salvar atendimento <span>→</span></button></div>
+      </form>
+    </dialog>
+
+    <dialog id="detail-dialog" class="modal detail-modal"><div id="detail-content"></div></dialog>
+    <div class="toast" id="toast" role="status"></div>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/dist/umd/supabase.js"></script>
+    <script src="config.js"></script>
+    <script src="cloud.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
