@@ -2,9 +2,26 @@
 
 Sistema acadêmico de pré-atendimento para clínicas, com organização de relatos por IA, entrevista assistida e exportação em PDF. Use somente pacientes e informações fictícias.
 
+## Integrantes
+
+- Ana Clara da Silva Lopes
+- José Antonio Marim Neto
+- Lavinia Maria Barbosa de Miranda
+- Luiz Guilherme Pelegatti da Rosa
+- Maria Clara Pereira Pires
+
 ## Iniciar o projeto
 
 Requisitos: Python 3.10 ou superior, internet e um projeto Supabase configurado. Node.js é usado somente nos testes JavaScript.
+
+Com o Git instalado, obtenha o código e entre na pasta do projeto:
+
+```powershell
+git clone https://github.com/netomarim/MedPrior.git
+cd MedPrior
+```
+
+Instale as dependências e crie o arquivo de configuração:
 
 ```powershell
 python -m pip install -r requirements.txt
@@ -22,6 +39,12 @@ Abra [http://127.0.0.1:3000](http://127.0.0.1:3000). Encerre com **Ctrl+C**. O a
 O Flask atende somente a máquina local, com debug desativado. A variável `PORT` permite trocar a porta, cujo padrão é `3000`.
 
 Consulte [CONFIGURACAO.md](CONFIGURACAO.md) para detalhes de ambiente e solução de problemas e [supabase/README.md](supabase/README.md) para o estado do banco e da função de IA.
+
+## Acesso para avaliação
+
+O código-fonte e estas instruções permitem revisar a implementação. Para executar com o ambiente Supabase da demonstração, solicite ao grupo a configuração `.env`, entregue separadamente. O repositório contém somente o modelo `.env.example`; senhas e chaves secretas não devem ser publicadas.
+
+Para testar as telas, use **Criar meu acesso**, confirme o e-mail e informe ao grupo o endereço cadastrado para receber vínculo com uma clínica de demonstração. O acesso ao GitHub e a conta do sistema são independentes. A demonstração pode ser executada localmente, com internet para o Supabase e a OpenRouter.
 
 ## Como funciona
 
@@ -75,7 +98,7 @@ O Flask consulta os dados salvos usando a sessão do usuário e gera o PDF em me
 | Python / Flask (`app.py`) | Serve a interface, gera a configuração pública, encaminha a chamada de IA e disponibiliza o PDF autenticado. |
 | Supabase Auth | Login, confirmação de e-mail e sessões. |
 | PostgreSQL / RLS | Dados, vínculos, autorização por clínica, consolidação das respostas e ciclo do atendimento. |
-| Edge Function `summarize-appointment` | Valida a sessão e o acesso ao atendimento antes de chamar a OpenRouter na etapa inicial. |
+| TypeScript / Edge Function `summarize-appointment` | Valida a sessão e o acesso ao atendimento antes de chamar a OpenRouter na etapa inicial. |
 | ReportLab (`reports.py`) | Gera os documentos PDF. |
 
 Cadastro, consulta e alterações dos atendimentos usam o SDK do Supabase no navegador. As políticas do banco são aplicadas a cada operação. Consultas de detalhes leem o atendimento e suas respostas juntos; alterações de status, prioridade e exclusões comparam a versão lida para detectar mudanças concorrentes.
