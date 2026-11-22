@@ -26,8 +26,32 @@ function fixture({deferAdmin=false, conflict=false, invalidConfig=false, authErr
   };
   const context={window:{location:{origin:'http://127.0.0.1:3000',hash:''},MEDPRIOR_CONFIG:invalidConfig?{}:{supabaseUrl:'https://example.supabase.co',supabasePublishableKey:'public-test-key'},supabase:{createClient:()=>client}}};
   vm.runInNewContext(fs.readFileSync(new URL('../cloud.js',import.meta.url),'utf8'),context);
-  return {cloud:context.window.MedPriorCloud,queries,resolveAdmin,authCalls};
+  return {cloud:context.window.MedPriorCloud,queries,resolveAdmin,authCalls,client};
 }
+
+test('password change verifies current credentials before updating the authenticated account',async()=>{
+ const {cloud,client,authCalls}=fixture();await cloud.bind({id:'user-one'});
+ client.auth.getUser=async()=>({data:{user:{id:'user-one',email:'test@example.test'}}});
+ client.auth.signInWithPassword=async credentials=>{authCalls.push(['verify',credentials]);return {data:{user:{id:'user-one'}}};};
+ await cloud.changePassword('current-test-password','replacement-test-password');
+ assert.equal(authCalls[0][0],'verify');assert.equal(authCalls[0][1].password,'current-test-password');
+ assert.equal(authCalls[1][0],'update');assert.equal(authCalls[1][1].password,'replacement-test-password');
+});
+test('wrong current password and changed account never update the password',async()=>{
+ const {cloud,client,authCalls}=fixture();await cloud.bind({id:'user-one'});
+ client.auth.getUser=async()=>({data:{user:{id:'user-one',email:'test@example.test'}}});
+ client.auth.signInWithPassword=async()=>({error:{code:'invalid_credentials'}});
+ await assert.rejects(cloud.changePassword('incorrect-test-password','replacement-test-password'),/atual está incorreta/);
+ client.auth.signInWithPassword=async()=>({data:{user:{id:'other-user'}}});
+ await assert.rejects(cloud.changePassword('current-test-password','replacement-test-password'),/sessão mudou/);
+ assert.equal(authCalls.length,0);
+});
+test('password change rejects short and repeated passwords before authentication',async()=>{
+ const {cloud,authCalls}=fixture();
+ await assert.rejects(cloud.changePassword('current-test-password','short'),/12 caracteres/);
+ await assert.rejects(cloud.changePassword('current-test-password','current-test-password'),/diferente/);
+ assert.equal(authCalls.length,0);
+});
 
 test('a bind finishing after logout cannot restore the old account access',async()=>{
   const {cloud,resolveAdmin}=fixture({deferAdmin:true});

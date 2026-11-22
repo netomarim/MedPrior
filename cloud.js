@@ -51,7 +51,7 @@ window.MedPriorCloud = (() => {
     },
     async session() { const {data,error} = await requireClient().auth.getSession(); if(error) throw error; return data.session; },
     async login(email,password) { const {data,error} = await requireClient().auth.signInWithPassword({email,password}); if(error) throw error; return data.session; },
-    async signup(email,password) { const {data,error} = await requireClient().auth.signUp({email,password}); if(error) throw error; return data; },
+    async signup(email,password,name) { const {data,error} = await requireClient().auth.signUp({email,password,options:{data:{full_name:name}}}); if(error) throw error; return data; },
     async requestPasswordReset(email) {
       const {error} = await requireClient().auth.resetPasswordForEmail(email, {
         redirectTo: window.location.origin + '/?recovery=1',
@@ -61,6 +61,22 @@ window.MedPriorCloud = (() => {
     async updatePassword(password) {
       const {error} = await requireClient().auth.updateUser({password});
       if (error) throw error;
+    },
+    async changePassword(currentPassword,password) {
+      if(password.length<12) throw new Error('Use pelo menos 12 caracteres na nova senha.');
+      if(currentPassword===password) throw new Error('Escolha uma senha diferente da atual.');
+      const auth=requireClient().auth;
+      const {data:identity,error:identityError}=await auth.getUser();
+      if(identityError) throw identityError;
+      const user=identity?.user;
+      if(!user?.email || user.id!==userId) throw new Error('Sua sessão mudou. Entre novamente para alterar a senha.');
+      const {data:verified,error:verificationError}=await auth.signInWithPassword({email:user.email,password:currentPassword});
+      if(verificationError) {
+        if(verificationError.code==='invalid_credentials' || /Invalid login credentials/i.test(verificationError.message)) throw new Error('A senha atual está incorreta.');
+        throw verificationError;
+      }
+      if(verified?.user?.id!==user.id || userId!==user.id) throw new Error('Sua sessão mudou. Entre novamente para alterar a senha.');
+      await this.updatePassword(password);
     },
     async logout() { const {error} = await requireClient().auth.signOut({scope:'local'}); if(error) throw error; this.clear(); },
     clear() { accessRevision++; clinicId=null; userId=null; access={isAdmin:false,clinics:[],memberships:[]}; },

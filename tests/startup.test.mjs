@@ -89,6 +89,14 @@ test('eye toggles password visibility and accessible label without submitting lo
  await eye.dispatch('click');assert.equal(input.type,'text');assert.equal(eye['aria-label'],'Ocultar senha');
  await eye.dispatch('click');assert.equal(input.type,'password');assert.equal(eye['aria-pressed'],'false');
 });
+test('signup also toggles password visibility accessibly',async()=>{
+ const {document}=await start();const eye=document.elements.get('toggle-signup-password'),input=document.elements.get('signup-password');
+ await eye.dispatch('click');assert.equal(input.type,'text');assert.equal(eye['aria-label'],'Ocultar senha');
+ await eye.dispatch('click');assert.equal(input.type,'password');assert.equal(eye['aria-pressed'],'false');
+ const confirmEye=document.elements.get('toggle-signup-password-confirm'),confirmInput=document.elements.get('signup-password-confirm');
+ await confirmEye.dispatch('click');assert.equal(confirmInput.type,'text');assert.equal(confirmEye['aria-label'],'Ocultar confirmação de senha');
+ await confirmEye.dispatch('click');assert.equal(confirmInput.type,'password');assert.equal(confirmEye['aria-pressed'],'false');
+});
 test('a recovery session opens password form instead of loading clinic records',async()=>{
  const {document,calls}=await start({user:{id:'one',email:'test@example.test'}},{recovery:true});
  assert.deepEqual(calls,[]);assert.equal(document.elements.get('password-reset-screen').classList.contains('hidden'),false);

@@ -13,12 +13,18 @@ let toastTimer;
 let stats = null;
 let passwordRecovery = /(?:[?&]recovery=1|(?:^|[#&])type=recovery)/.test((window.location?.search || '') + (window.location?.hash || ''));
 function initials(value) { return value.trim().split(/\s+/).slice(0, 2).map(part => part[0]?.toUpperCase() || '').join(''); }
+function userDisplayName(user) {
+  const metadataName = String(user?.user_metadata?.full_name || user?.user_metadata?.name || '').trim();
+  if (metadataName) return metadataName;
+  const local = String(user?.email || '').split('@')[0].replace(/[._-]+/g, ' ').replace(/\d+/g, ' ').replace(/\s+/g, ' ').trim();
+  return local ? local.replace(/(^|\s)\p{L}/gu, letter => letter.toLocaleUpperCase('pt-BR')) : 'Usuário';
+}
 function escapeHtml(value) { return String(value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char])); }
 function formatTime(iso) { return new Intl.DateTimeFormat('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(iso)); }
 function statusClass(status) { return status === 'Aguardando' ? 'waiting' : status === 'Em atendimento' ? 'progress' : 'done'; }
 function rowTemplate(item) {
   const report = escapeHtml(item.report);
-  return `<tr><td><div class="patient-cell"><span class="patient-avatar">${escapeHtml(initials(item.patient))}</span><span>${escapeHtml(item.patient)}${item.age !== '' ? `<small class="patient-age">${escapeHtml(item.age)} anos</small>` : ''}</span></div></td><td class="report-cell" title="${report}">${report}</td><td>${formatTime(item.createdAt)}</td><td><span class="priority-badge ${escapeHtml(item.priority || 'not_assessed')}">${escapeHtml(window.MedPriorAnalysis.priorities[item.priority] || 'Não classificado')}</span></td><td><span class="status ${statusClass(item.status)}">${escapeHtml(item.status)}</span></td><td><div class="row-actions"><button class="more-button" aria-label="Ver atendimento" data-detail="${item.id}">Ver</button></div></td></tr>`;
+  return `<tr><td data-label="Paciente"><div class="patient-cell"><span class="patient-avatar">${escapeHtml(initials(item.patient))}</span><span>${escapeHtml(item.patient)}${item.age !== '' ? `<small class="patient-age">${escapeHtml(item.age)} anos</small>` : ''}</span></div></td><td data-label="Relato" class="report-cell" title="${report}">${report}</td><td data-label="Registrado">${formatTime(item.createdAt)}</td><td data-label="Prioridade"><span class="priority-badge ${escapeHtml(item.priority || 'not_assessed')}">${escapeHtml(window.MedPriorAnalysis.priorities[item.priority] || 'Não classificado')}</span></td><td data-label="Status"><span class="status ${statusClass(item.status)}">${escapeHtml(item.status)}</span></td><td><div class="row-actions"><button class="more-button" aria-label="Ver atendimento" data-detail="${item.id}">Abrir</button></div></td></tr>`;
 }
 
 function render() {
@@ -97,12 +103,15 @@ function showToast(message) {
   clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.remove('show'), 5500);
 }
 function showView(name) {
+  if(name!=='configuracoes')clearAccountPasswordForm();
   if (name === 'clinicas' && !cloud.access.isAdmin) return;
   if (['inicio','atendimentos'].includes(name) && !cloud.clinicId) name = 'no-clinic';
   if (name === 'equipe' && !cloud.access.isAdmin && !cloud.access.memberships.some(m => m.role === 'owner')) return;
   $$('.view').forEach(view => view.classList.toggle('hidden', view.id !== `view-${name}`));
-  $$('.nav-item').forEach(item => item.classList.toggle('active', item.dataset.view === name));
-  $('#crumb-current').textContent = ({inicio:'Visão geral',atendimentos:'Atendimentos',clinicas:'Clínicas',equipe:'Equipe e acessos','no-clinic':'Meu acesso'})[name];
+  $$('.nav-item').forEach(item => {const active=item.dataset.view===name;item.classList.toggle('active',active);if(active)item.setAttribute('aria-current','page');else item.removeAttribute?.('aria-current');});
+  $('#authenticated-app').classList.remove('menu-open');
+  $('#menu-toggle').setAttribute('aria-expanded','false');
+  $('#crumb-current').textContent = ({inicio:'Visão geral',atendimentos:'Atendimentos',clinicas:'Clínicas',equipe:'Equipe e acessos',configuracoes:'Configurações','no-clinic':'Meu acesso'})[name];
   if (name === 'equipe') loadTeam();
   window.scrollTo({top:0,behavior:'smooth'});
 }
@@ -129,6 +138,7 @@ async function openDetail(id) {
   const history = answers.length ? `<section class="detail-section"><h3>Respostas registradas</h3>${answers.map(a => `<article class="answer-record"><strong>${escapeHtml(a.question)}</strong><p>${escapeHtml(a.answer)}</p><small>Registrado ${a.recorded_by === cloud.userId ? 'por você' : 'pela equipe'} em ${new Date(a.recorded_at).toLocaleString('pt-BR')}</small></article>`).join('')}</section>` : '';
   const questions = !closed && unanswered.length ? `<form id="answer-form" class="interview-form"><h3>Complete com o paciente</h3><p>Esta é a única rodada de perguntas. Preencha todas as respostas; use “Não informado” quando o paciente não souber responder.</p>${unanswered.map((q,i) => `<label class="field">${escapeHtml(q)}<textarea name="answer-${i}" rows="2" maxlength="500" required placeholder="Resposta informada pelo paciente ou Não informado"></textarea></label>`).join('')}<button type="submit" class="button button-primary">Salvar respostas e atualizar ficha</button></form>` : '';
   $('#detail-content').innerHTML = `<div class="detail-top"><div><p class="eyebrow">PRÉ-ATENDIMENTO</p><h2 class="detail-name">${escapeHtml(item.patient)}</h2><div class="detail-meta">${item.age !== '' ? `${escapeHtml(item.age)} anos · ` : ''}${escapeHtml(sources[item.reportSource] || 'Paciente')} · Registrado ${item.createdBy === cloud.userId ? 'por você' : 'pela equipe'} em ${formatTime(item.createdAt)}</div></div><button class="close-button" id="close-detail" aria-label="Fechar">×</button></div>
+    <div class="detail-summary"><span class="status ${statusClass(item.status)}">${escapeHtml(item.status)}</span><span class="priority-badge ${escapeHtml(item.priority || 'not_assessed')}">${escapeHtml(window.MedPriorAnalysis.priorities[item.priority] || 'Não classificado')}</span></div>
     <div class="pdf-actions"><button type="button" class="button button-secondary" id="download-pdf">Baixar PDF para revisão médica</button><small>Inclui apenas as informações já salvas.</small></div>
     <section class="detail-section"><h3>Relato original</h3><div class="detail-report">${escapeHtml(item.report)}</div></section>${data?.version === 3 ? '' : history}
     <div class="ai-card"><div class="ai-card-title">${interviewComplete ? 'Ficha final consolidada' : 'Ficha de pré-atendimento com IA'}</div>${item.analysisStale ? '<p class="ai-stale">Há respostas novas. Atualize a ficha para considerá-las.</p>' : ''}<div id="ai-summary">${window.MedPriorAnalysis.render(item.aiSummary)}</div><p id="ai-message" role="status"></p>${!closed && (!interviewComplete || item.analysisStale || data?.version !== 3) ? `<button class="button button-secondary" id="generate-summary">${interviewComplete ? 'Consolidar respostas salvas' : item.aiSummary ? 'Atualizar perguntas da IA' : 'Gerar perguntas com IA'}</button>` : ''}<div class="ai-demo-label">Confira com o paciente. Conteúdo gerado por IA, sujeito a erros. Não é uma avaliação clínica.</div></div>${questions}
@@ -232,6 +242,8 @@ function renderAccess() {
   $('#clinic-select').innerHTML=work.length ? work.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('') : '<option value="">Sem clínica ativa</option>';
   $('#clinic-select').value=cloud.clinicId || '';
   $('#account-role').textContent=isAdmin?'Superadministrador da plataforma':!cloud.clinicId?'Sem vínculo operacional ativo':cloud.canManage?'Administrador da clínica':'Equipe da clínica';
+  $('#settings-role').textContent=$('#account-role').textContent;
+  $('#settings-clinic').textContent=clinics.find(c=>c.id===cloud.clinicId)?.name || 'Sem clínica ativa';
   $('#nav-clinicas').classList.toggle('hidden',!isAdmin);
   const managed=clinics.filter(c => isAdmin || memberships.some(m => m.clinic_id===c.id && m.role==='owner'));
   $('#nav-equipe').classList.toggle('hidden',!managed.length);
@@ -251,6 +263,7 @@ function renderAccess() {
   ['#new-from-home','#new-empty','#new-from-list'].forEach(selector => $(selector).disabled=!cloud.clinicId);
 }
 function showLogin(message='') {
+  clearAccountPasswordForm();
   sessionVersion++; detailEpoch++; busy=false; cloud.clear(); appointments=[]; queue=[]; detailItem=null; stats=null; resetListState(); render();
   $$('dialog[open]').forEach(dialog=>dialog.close());
   $('#authenticated-app').classList.add('hidden'); $('#login-screen').classList.remove('hidden'); $('#login-message').textContent=message;
@@ -285,10 +298,16 @@ async function enterSession(session,view) {
   const selected=available.find(c=>c.id===previous)||available[0];
   if(selected) {cloud.selectClinic(selected.id); await reloadAppointments();}
   if(version!==sessionVersion)return;
-  renderAccess(); $('#profile-email').textContent=session.user.email; $('#profile-avatar').textContent=initials(session.user.email.split('@')[0]);
+  const displayName=userDisplayName(session.user);
+  renderAccess(); $('#profile-name').textContent=displayName; $('#profile-email').textContent=session.user.email; $('#profile-avatar').textContent=initials(displayName);
+  $('#settings-name').textContent=displayName;
+  $('#settings-email').textContent=session.user.email || 'Não informado';
+  $('#settings-avatar').textContent=initials(displayName);
   $('#login-screen').classList.add('hidden'); $('#authenticated-app').classList.remove('hidden');
   showView(view || (selected?'inicio':access.isAdmin?'clinicas':'no-clinic'));
 }
+$('#menu-toggle').addEventListener('click',()=>{const open=$('#menu-toggle').getAttribute('aria-expanded')!=='true';$('#authenticated-app').classList.toggle('menu-open',open);$('#menu-toggle').setAttribute('aria-expanded',String(open));});
+document.addEventListener?.('keydown',event=>{if(event.key==='Escape' && $('#menu-toggle').getAttribute('aria-expanded')==='true'){$('#authenticated-app').classList.remove('menu-open');$('#menu-toggle').setAttribute('aria-expanded','false');$('#menu-toggle').focus();}});
 $$('.nav-item').forEach(item=>item.addEventListener('click',()=>showView(item.dataset.view)));
 $$('[data-go]').forEach(item=>item.addEventListener('click',()=>showView(item.dataset.go)));
 ['#new-from-home','#new-empty','#new-from-list'].forEach(selector=>$(selector).addEventListener('click',openForm));
@@ -319,6 +338,20 @@ $('#toggle-login-password').addEventListener('click',()=>{
   const input=$('#login-password'), button=$('#toggle-login-password');
   const visible=input.type==='password'; input.type=visible?'text':'password';
   button.setAttribute('aria-label',visible?'Ocultar senha':'Mostrar senha');
+  button.setAttribute('aria-pressed',String(visible));
+  $('.eye-slash',button).classList.toggle('hidden',!visible);
+});
+$('#toggle-signup-password').addEventListener('click',()=>{
+  const input=$('#signup-password'), button=$('#toggle-signup-password');
+  const visible=input.type==='password'; input.type=visible?'text':'password';
+  button.setAttribute('aria-label',visible?'Ocultar senha':'Mostrar senha');
+  button.setAttribute('aria-pressed',String(visible));
+  $('.eye-slash',button).classList.toggle('hidden',!visible);
+});
+$('#toggle-signup-password-confirm').addEventListener('click',()=>{
+  const input=$('#signup-password-confirm'), button=$('#toggle-signup-password-confirm');
+  const visible=input.type==='password'; input.type=visible?'text':'password';
+  button.setAttribute('aria-label',visible?'Ocultar confirmação de senha':'Mostrar confirmação de senha');
   button.setAttribute('aria-pressed',String(visible));
   $('.eye-slash',button).classList.toggle('hidden',!visible);
 });
@@ -376,15 +409,55 @@ $('#member-form').addEventListener('submit',async event=>{
   try {await cloud.addMember($('#team-clinic').value,String(data.get('email')).trim(),data.get('role'));event.target.reset();$('#team-message').textContent='Acesso vinculado à clínica.';await loadTeam();}
   catch(error){$('#team-message').textContent=friendlyError(error);}finally{button.disabled=false;}
 });
-$('#open-signup').addEventListener('click',()=>{$('#signup-form').reset();$('#signup-message').textContent='';$('#signup-dialog').showModal();});
+$('#open-signup').addEventListener('click',()=>{$('#signup-form').reset();[['#signup-password','#toggle-signup-password','Mostrar senha'],['#signup-password-confirm','#toggle-signup-password-confirm','Mostrar confirmação de senha']].forEach(([inputSelector,buttonSelector,label])=>{const input=$(inputSelector),button=$(buttonSelector);input.type='password';button.setAttribute('aria-label',label);button.setAttribute('aria-pressed','false');$('.eye-slash',button).classList.add('hidden');});$('#signup-message').textContent='';$('#signup-dialog').showModal();});
 $('#close-signup').addEventListener('click',()=>$('#signup-dialog').close());
 $('#signup-form').addEventListener('submit',async event=>{
   event.preventDefault();const form=event.currentTarget,data=new FormData(form),button=form.querySelector('[type="submit"]');button.disabled=true;
-  try {const result=await cloud.signup(String(data.get('email')).trim(),String(data.get('password')));form.reset();
+  if(String(data.get('password'))!==String(data.get('password-confirm'))){$('#signup-message').textContent='As senhas não coincidem. Confira os dois campos.';button.disabled=false;return;}
+  try {const result=await cloud.signup(String(data.get('email')).trim(),String(data.get('password')),String(data.get('name')).trim());form.reset();
     if(result.session){$('#signup-dialog').close();await enterSession(result.session);}else{$('#signup-message').textContent='Se o cadastro for aceito, você receberá a confirmação por e-mail. Depois, entre e solicite seu vínculo à clínica.';}}
   catch(error){$('#signup-message').textContent=friendlyError(error);}finally{button.disabled=false;}
 });
-$('#about-system').addEventListener('click',event=>{event.preventDefault();window.alert('O atendente registra o relato informado pelo paciente, gera as perguntas da IA e salva as respostas. O administrador gerencia a equipe da clínica. O superadministrador cadastra e ativa clínicas. Use somente pacientes fictícios.');});
+function clearAccountPasswordForm() {
+  $('#account-password-form').reset();
+  ['current','new','confirm'].forEach(key=>{$(`#account-password-${key}`).value='';$(`#account-password-${key}`).type='password';});
+  $$('.account-password-toggle').forEach(button=>{button.setAttribute('aria-pressed','false');button.setAttribute('aria-label',button.getAttribute('aria-label').replace(/^Ocultar/,'Mostrar'));$('.eye-slash',button).classList.add('hidden');});
+  $('#account-password-message').textContent='';
+}
+$$('.account-password-toggle').forEach(button=>button.addEventListener('click',()=>{
+  const input=$(`#${button.getAttribute('aria-controls')}`),visible=input.type==='password';
+  input.type=visible?'text':'password';button.setAttribute('aria-pressed',String(visible));
+  button.setAttribute('aria-label',button.getAttribute('aria-label').replace(/^(Mostrar|Ocultar)/,visible?'Ocultar':'Mostrar'));
+  $('.eye-slash',button).classList.toggle('hidden',!visible);
+}));
+$('#account-password-form').addEventListener('submit',async event=>{
+  event.preventDefault();if(busy)return;
+  const current=$('#account-password-current').value,password=$('#account-password-new').value,confirm=$('#account-password-confirm').value;
+  const message=$('#account-password-message');
+  if(password.length<12){message.textContent='Use pelo menos 12 caracteres na nova senha.';return;}
+  if(password!==confirm){message.textContent='As senhas não coincidem. Confira a confirmação.';return;}
+  if(password===current){message.textContent='Escolha uma senha diferente da atual.';return;}
+  if(!current){message.textContent='Informe sua senha atual.';return;}
+  const version=sessionVersion;busy=true;
+  const controls=$$('#account-password-form input, #account-password-form button');controls.forEach(control=>control.disabled=true);
+  message.textContent='Salvando nova senha...';
+  try {
+    await cloud.changePassword(current,password);
+    if(version===sessionVersion){clearAccountPasswordForm();message.textContent='Senha atualizada com sucesso. Use a nova senha no próximo acesso.';}
+  }catch(error){
+    if(version===sessionVersion){clearAccountPasswordForm();message.textContent=friendlyError(error,'Não foi possível alterar a senha. Tente novamente.');}
+  }finally{busy=false;controls.forEach(control=>control.disabled=false);}
+});
+$$('input[name="appearance"]').forEach(input=>{
+  input.checked=input.value===window.MedPriorTheme?.preference;
+  input.addEventListener('change',()=>{
+    if(!input.checked)return;
+    window.MedPriorTheme.set(input.value);
+    const labels={light:'Claro',dark:'Escuro',system:'Sistema'};
+    $('#theme-message').textContent=`Tema ${labels[input.value]} aplicado. A preferência vale para este navegador.`;
+  });
+});
+$('#about-system').addEventListener('click',event=>{event.preventDefault();$('#help-dialog').showModal();});
 window.addEventListener?.('beforeunload',event=>{
   const dirtyDetail=$('#detail-dialog').open && (hasAnswerDraft() || hasPriorityDraft());
   const form=$('#appointment-form');
