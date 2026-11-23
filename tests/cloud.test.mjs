@@ -53,6 +53,30 @@ test('password change rejects short and repeated passwords before authentication
  assert.equal(authCalls.length,0);
 });
 
+test('patient names accept letters, accents and spaces, but reject digits and punctuation',()=>{
+ const {cloud}=fixture();
+ for(const patient of ['Ana Maria','João da Conceição','Érica','Jose\u0301']) assert.equal(cloud.validateAppointment({patient,report:'Dor há 3 dias.'}).errors.patient,undefined);
+ for(const patient of ['Ana!!!','Ana123','123','Ana-Maria',"D’Ávila",'😀','   ']) assert.ok(cloud.validateAppointment({patient,report:'Dor'}).errors.patient);
+ assert.equal(cloud.validateAppointment({patient:'Jose\u0301',report:'Dor'}).patient,'José');
+});
+test('reports require at least one letter and allow clinical numbers with text',async()=>{
+ const {cloud,queries}=fixture();
+ for(const report of ['56565656565556665566','123 !!!','...','   ']) {
+   assert.ok(cloud.validateAppointment({patient:'Ana',report}).errors.report);
+   await assert.rejects(cloud.create({patient:'Ana',report}),/pelo menos uma letra/);
+ }
+ for(const report of ['Dor há 3 dias','Febre 38,5 °C','a']) assert.equal(cloud.validateAppointment({patient:'Ana',report}).errors.report,undefined);
+ await assert.rejects(cloud.create({patient:'Ana!!!',report:'Dor'}),/somente letras/);
+ assert.equal(queries.length,0);
+});
+test('clinic names require a letter before calling the database',async()=>{
+ const {cloud,client}=fixture();const calls=[];
+ client.rpc=async(name,args)=>{calls.push({name,args});return {data:'clinic-id'};};
+ for(const name of ['222222','123 !!!','   ','---']) await assert.rejects(cloud.createClinic(name,'test@example.test'),/pelo menos uma letra/);
+ assert.equal(calls.length,0);
+ for(const name of ['Clínica 24 Horas','Saúde','São José']) await cloud.createClinic(name,'test@example.test');
+ assert.equal(calls.length,3);assert.equal(calls[0].args.p_name,'Clínica 24 Horas');
+});
 test('a bind finishing after logout cannot restore the old account access',async()=>{
   const {cloud,resolveAdmin}=fixture({deferAdmin:true});
   const binding=cloud.bind({id:'old-user'});

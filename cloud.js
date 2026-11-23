@@ -38,7 +38,18 @@ window.MedPriorCloud = (() => {
     access = { isAdmin, clinics, memberships };
     return access;
   }
+  function validateAppointment(item) {
+    const patient=String(item.patient || '').normalize('NFC').trim();
+    const report=String(item.report || '').normalize('NFC').trim();
+    const errors={};
+    if(!patient || !/^\p{L}[\p{L}\p{M} ]*$/u.test(patient)) errors.patient='Use somente letras, acentos e espaços no nome do paciente.';
+    else if(patient.length>80) errors.patient='O nome deve ter no máximo 80 caracteres.';
+    if(!/\p{L}/u.test(report)) errors.report='Descreva o relato com pelo menos uma letra. Não use apenas números ou símbolos.';
+    else if(report.length>1200) errors.report='O relato deve ter no máximo 1200 caracteres.';
+    return {patient,report,errors};
+  }
   return {
+    validateAppointment,
     client, bind, map, recoveryLinkError,
     get access() { return access; },
     get userId() { return userId; },
@@ -101,6 +112,9 @@ window.MedPriorCloud = (() => {
       return {item:map(data),answers:[...(data.appointment_answers || [])].sort((a,b)=>new Date(a.recorded_at)-new Date(b.recorded_at))};
     },
     async create(item) {
+      const validated=validateAppointment(item);
+      if(Object.keys(validated.errors).length) throw new Error(Object.values(validated.errors)[0]);
+      item={...item,patient:validated.patient,report:validated.report};
       requireClinic(); const {data,error} = await client.from('appointments').insert({clinic_id:clinicId,created_by:userId,
         patient_label:item.patient,age:item.age === '' ? null : Number(item.age),report:item.report,report_source:item.reportSource})
         .select().single();
@@ -155,7 +169,12 @@ window.MedPriorCloud = (() => {
       requireClinic(); const {data,error}=await client.from('appointments').delete().eq('clinic_id',clinicId).eq('id',item.id).eq('updated_at',item.updatedAt).select('id');
       if(error) throw error; if(data.length!==1) throw new Error('O atendimento mudou ou seu acesso foi removido. Atualize a lista antes de excluir.');
     },
-    createClinic: (name,email)=>rpc('create_clinic',{p_name:name,p_owner_email:email}),
+    async createClinic(name,email) {
+      name=String(name || '').normalize('NFC').trim();
+      if(!/\p{L}/u.test(name)) throw new Error('O nome da clínica deve conter pelo menos uma letra.');
+      if(name.length<2 || name.length>100) throw new Error('Informe um nome entre 2 e 100 caracteres.');
+      return rpc('create_clinic',{p_name:name,p_owner_email:email});
+    },
     setClinicActive: (id,active)=>rpc('set_clinic_active',{p_id:id,p_active:active}),
     team: id=>rpc('list_clinic_team',{p_clinic:id}),
     addMember: (id,email,role)=>rpc('add_clinic_member',{p_clinic:id,p_email:email,p_role:role}),

@@ -115,7 +115,10 @@ function showView(name) {
   if (name === 'equipe') loadTeam();
   window.scrollTo({top:0,behavior:'smooth'});
 }
-function openForm() { if (!cloud.clinicId) return; $('#appointment-form').reset(); $('#appointment-dialog').showModal(); }
+function showAppointmentErrors(errors={}) {
+  ['patient','report'].forEach(key=>{$(`#${key}-error`).textContent=errors[key] || '';$(`#appointment-${key}`).setAttribute('aria-invalid',String(Boolean(errors[key])));});
+}
+function openForm() { if (!cloud.clinicId) return; $('#appointment-form').reset(); showAppointmentErrors(); $('#appointment-dialog').showModal(); }
 function closeDetail() {
   if (busy) { showToast('Aguarde a operação terminar.'); return false; }
   const dirty = hasAnswerDraft() || hasPriorityDraft();
@@ -315,10 +318,16 @@ $('#close-modal').addEventListener('click',closeAppointment);
 $('#cancel-modal').addEventListener('click',closeAppointment);
 $('#appointment-dialog').addEventListener('cancel',event=>{event.preventDefault();closeAppointment();});
 $('#detail-dialog').addEventListener('cancel',event=>{event.preventDefault();closeDetail();});
+['patient','report'].forEach(key=>$(`#appointment-${key}`).addEventListener('input',()=>{
+  const {errors}=cloud.validateAppointment({patient:$('#appointment-patient').value,report:$('#appointment-report').value});
+  $(`#${key}-error`).textContent=errors[key] || '';
+  $(`#appointment-${key}`).setAttribute('aria-invalid',String(Boolean(errors[key])));
+}));
 $('#appointment-form').addEventListener('submit',async event=>{
   event.preventDefault(); const form=new FormData(event.currentTarget); const button=event.currentTarget.querySelector('[type="submit"]');
-  const patient=String(form.get('patient')).trim(), report=String(form.get('report')).trim();
-  if(!patient||!report){showToast('Preencha o paciente e o relato.');return;}
+  const {patient,report,errors}=cloud.validateAppointment({patient:form.get('patient'),report:form.get('report')});
+  showAppointmentErrors(errors);
+  if(Object.keys(errors).length){$(`#appointment-${errors.patient?'patient':'report'}`).focus();return;}
   const version=sessionVersion; appointmentSaving=true; button.disabled=true;
   $('#close-modal').disabled=true; $('#cancel-modal').disabled=true;
   try {
@@ -398,7 +407,15 @@ $('#refresh-access').addEventListener('click',async event=>{
   if(busy || ($('#detail-dialog').open&&!closeDetail()))return;
   event.target.disabled=true;try{await enterSession(await cloud.session());}catch(error){showLogin(friendlyError(error));}finally{event.target.disabled=false;}
 });
+function validateClinicName() {
+  const valid=/\p{L}/u.test($('#clinic-name').value);
+  $('#clinic-name-error').textContent=valid?'':'O nome da clínica deve conter pelo menos uma letra.';
+  $('#clinic-name').setAttribute('aria-invalid',String(!valid));
+  return valid;
+}
+$('#clinic-name').addEventListener('input',validateClinicName);
 $('#clinic-form').addEventListener('submit',async event=>{
+  if(!validateClinicName()){event.preventDefault();$('#clinic-name').focus();return;}
   event.preventDefault();const form=event.currentTarget, data=new FormData(form),button=form.querySelector('button');button.disabled=true;
   try {await cloud.createClinic(String(data.get('name')).trim(),String(data.get('owner')).trim());form.reset();await enterSession(await cloud.session(),'clinicas');$('#clinic-message').textContent='Clínica cadastrada e administrador vinculado.';}
   catch(error){$('#clinic-message').textContent=friendlyError(error);}finally{button.disabled=false;}
